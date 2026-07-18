@@ -42,6 +42,10 @@ func ErrDhcpDisabled() *errors.Error {
 		"DHCP service is disabled; enable it before provisioning")
 }
 
+func ErrTooManyRequests() *errors.Error {
+	return errors.New(http.StatusTooManyRequests, "RATE_LIMITED", "too many requests")
+}
+
 type envelopeError struct {
 	Reason  string            `json:"reason"`
 	Message string            `json:"message"`

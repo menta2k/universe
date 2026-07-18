@@ -11,6 +11,9 @@ import (
 	"universe/backend/internal/conf"
 )
 
+// loginAttemptsPerMinute bounds authentication attempts per client.
+const loginAttemptsPerMinute = 10
+
 // RegisterFn attaches a service to the HTTP server.
 type RegisterFn func(*khttp.Server)
 
@@ -26,8 +29,10 @@ func NewHTTPServer(
 ) *khttp.Server {
 	srv := khttp.NewServer(
 		khttp.Address(c.Server.HTTPAddr),
+		khttp.Filter(SecurityHeaders),
 		khttp.Middleware(
 			recovery.Recovery(),
+			RateLimitLogin(loginAttemptsPerMinute),
 			AuthMiddleware(operators, "nb_session"),
 			AuditMiddleware(events),
 		),
