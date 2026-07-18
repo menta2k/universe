@@ -62,7 +62,9 @@ func TestLoadMissingRequiredFields(t *testing.T) {
 		mutate func(string) string
 		errSub string
 	}{
-		{"missing dsn", func(s string) string { return strings.Replace(s, `dsn: "postgres://netboot:pw@localhost:5432/netboot"`, `dsn: ""`, 1) }, "database.dsn"},
+		{"missing dsn", func(s string) string {
+			return strings.Replace(s, `dsn: "postgres://netboot:pw@localhost:5432/netboot"`, `dsn: ""`, 1)
+		}, "database.dsn"},
 		{"missing valkey", func(s string) string { return strings.Replace(s, `addr: "localhost:6379"`, `addr: ""`, 1) }, "valkey.addr"},
 		{"missing artifact root", func(s string) string { return strings.Replace(s, `root: "/var/lib/netboot/artifacts"`, `root: ""`, 1) }, "artifacts.root"},
 		{"missing external boot url", func(s string) string {

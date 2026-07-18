@@ -17,8 +17,8 @@ artifacts:
 
 netboot:
   dhcp_interface: "eth1"
-  dhcp_addr: ":67"
-  tftp_addr: ":69"
+  dhcp_addr: ":6767"
+  tftp_addr: ":6969"
   stale_session_timeout: "60m"
   seed_token_ttl: "30m"
   lease_ttl: "1h"

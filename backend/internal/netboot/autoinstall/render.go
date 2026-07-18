@@ -1,0 +1,206 @@
+// Package autoinstall renders Ubuntu autoinstall (subiquity) seed documents
+// for the boot HTTP endpoints (contracts/boot-protocols.md §4). Rendered
+// documents are validated structurally before being returned: on any failure
+// callers receive an error and empty strings, never a partial document (FR-008).
+package autoinstall
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"text/template"
+
+	"gopkg.in/yaml.v3"
+
+	"universe/backend/internal/biz"
+)
+
+const (
+	cloudConfigHeader = "#cloud-config\n"
+	identityUsername  = "ubuntu"
+	autoinstallVer    = 1
+)
+
+// Input carries everything needed to render seed documents for one session.
+type Input struct {
+	Machine *biz.Machine
+	Profile *biz.Profile
+	Session *biz.Session
+	// BootURL is the machine-facing base URL, e.g. "http://10.0.0.1:8082".
+	BootURL   string
+	SeedToken string
+	// OneTimePasswordHash is an already-hashed crypt string; treated as opaque.
+	OneTimePasswordHash string
+}
+
+func (in Input) validate() error {
+	switch {
+	case in.Machine == nil:
+		return errors.New("autoinstall input: machine is nil")
+	case in.Profile == nil:
+		return errors.New("autoinstall input: profile is nil")
+	case in.Session == nil:
+		return errors.New("autoinstall input: session is nil")
+	case in.BootURL == "":
+		return errors.New("autoinstall input: boot URL is empty")
+	case in.SeedToken == "":
+		return errors.New("autoinstall input: seed token is empty")
+	}
+	return nil
+}
+
+func (in Input) reportURL() string {
+	return fmt.Sprintf("%s/boot/report/%s", strings.TrimRight(in.BootURL, "/"), in.SeedToken)
+}
+
+// Render produces the user-data and meta-data documents for a session.
+// The user-data is either the default document built from the profile or, when
+// profile.UserDataTemplate is set, that Go template executed with Input fields.
+// Either way the result is schema-validated; on failure both strings are empty.
+func Render(in Input) (userData string, metaData string, err error) {
+	if err := in.validate(); err != nil {
+		return "", "", err
+	}
+	if in.Profile.UserDataTemplate != "" {
+		userData, err = renderTemplate(in)
+	} else {
+		userData, err = renderDefault(in)
+	}
+	if err != nil {
+		return "", "", err
+	}
+	if err := validateDocument(userData); err != nil {
+		return "", "", fmt.Errorf("rendered autoinstall document invalid: %w", err)
+	}
+	metaData = fmt.Sprintf("instance-id: %s\nlocal-hostname: %s\n", in.Session.ID, in.Machine.Name)
+	return userData, metaData, nil
+}
+
+// Cmdline builds the kernel command line pointing the installer at the seed.
+// Newlines and carriage returns are rejected to prevent script injection.
+func Cmdline(in Input) (string, error) {
+	if err := in.validate(); err != nil {
+		return "", err
+	}
+	cmdline := fmt.Sprintf("autoinstall ds=nocloud-net;s=%s/boot/seed/%s/",
+		strings.TrimRight(in.BootURL, "/"), in.SeedToken)
+	if extra := in.Profile.KernelCmdlineExtra; extra != "" {
+		cmdline = cmdline + " " + extra
+	}
+	if strings.ContainsAny(cmdline, "\n\r") {
+		return "", fmt.Errorf("kernel cmdline contains newline characters: %q", cmdline)
+	}
+	return cmdline, nil
+}
+
+// renderDefault builds the standard document from profile fields via yaml.Marshal.
+func renderDefault(in Input) (string, error) {
+	storage, err := storageSection(in.Profile.StorageLayout)
+	if err != nil {
+		return "", fmt.Errorf("build storage section: %w", err)
+	}
+	lateCommands := make([]string, 0, len(in.Profile.LateCommands)+1)
+	for _, cmd := range in.Profile.LateCommands {
+		lateCommands = append(lateCommands, "curtin in-target -- "+cmd)
+	}
+	report := in.reportURL()
+	lateCommands = append(lateCommands, "wget -qO- --post-data=status=ok "+report)
+
+	ai := map[string]any{
+		"version": autoinstallVer,
+		"identity": map[string]any{
+			"hostname": in.Machine.Name,
+			"username": identityUsername,
+			"password": in.OneTimePasswordHash,
+		},
+		"ssh": map[string]any{
+			"install-server":  true,
+			"authorized-keys": in.Profile.SSHAuthorizedKeys,
+			"allow-pw":        false,
+		},
+		"storage":        storage,
+		"late-commands":  lateCommands,
+		"error-commands": []string{"wget -qO- --post-data=status=error " + report},
+	}
+	if len(in.Profile.Packages) > 0 {
+		ai["packages"] = in.Profile.Packages
+	}
+	if len(in.Profile.NetworkConfig) > 0 {
+		ai["network"] = in.Profile.NetworkConfig
+	}
+	body, err := yaml.Marshal(map[string]any{"autoinstall": ai})
+	if err != nil {
+		return "", fmt.Errorf("marshal autoinstall document: %w", err)
+	}
+	return cloudConfigHeader + string(body), nil
+}
+
+// renderTemplate executes profile.UserDataTemplate as a Go text/template with
+// the Input fields as dot. Missing keys are a hard error.
+func renderTemplate(in Input) (string, error) {
+	tmpl, err := template.New("user-data").Option("missingkey=error").
+		Parse(in.Profile.UserDataTemplate)
+	if err != nil {
+		return "", fmt.Errorf("parse user-data template: %w", err)
+	}
+	dot := map[string]any{
+		"Machine":             in.Machine,
+		"Profile":             in.Profile,
+		"Session":             in.Session,
+		"BootURL":             in.BootURL,
+		"SeedToken":           in.SeedToken,
+		"OneTimePasswordHash": in.OneTimePasswordHash,
+	}
+	var buf strings.Builder
+	if err := tmpl.Execute(&buf, dot); err != nil {
+		return "", fmt.Errorf("execute user-data template: %w", err)
+	}
+	return buf.String(), nil
+}
+
+// storageSection maps the profile storage layout to the autoinstall storage map.
+func storageSection(layout biz.StorageLayout) (map[string]any, error) {
+	switch layout.Mode {
+	case "lvm", "direct":
+		return map[string]any{"layout": map[string]any{"name": layout.Mode}}, nil
+	case "custom":
+		if layout.Custom == nil {
+			return nil, errors.New("storage mode custom but no custom config provided")
+		}
+		return map[string]any{"config": layout.Custom}, nil
+	default:
+		return nil, fmt.Errorf("unsupported storage layout mode %q", layout.Mode)
+	}
+}
+
+// validateDocument parses the rendered YAML and enforces the structural
+// contract: autoinstall map with version 1, identity and ssh sections present,
+// allow-pw false, and at least one authorized key.
+func validateDocument(userData string) error {
+	var doc map[string]any
+	if err := yaml.Unmarshal([]byte(userData), &doc); err != nil {
+		return fmt.Errorf("parse rendered YAML: %w", err)
+	}
+	ai, ok := doc["autoinstall"].(map[string]any)
+	if !ok {
+		return errors.New("top-level autoinstall map missing")
+	}
+	if version, ok := ai["version"].(int); !ok || version != autoinstallVer {
+		return fmt.Errorf("autoinstall.version = %v, want %d", ai["version"], autoinstallVer)
+	}
+	if _, ok := ai["identity"].(map[string]any); !ok {
+		return errors.New("autoinstall.identity section missing")
+	}
+	sshSec, ok := ai["ssh"].(map[string]any)
+	if !ok {
+		return errors.New("autoinstall.ssh section missing")
+	}
+	if allowPw, ok := sshSec["allow-pw"].(bool); !ok || allowPw {
+		return fmt.Errorf("autoinstall.ssh.allow-pw = %v, must be false", sshSec["allow-pw"])
+	}
+	keys, ok := sshSec["authorized-keys"].([]any)
+	if !ok || len(keys) == 0 {
+		return errors.New("autoinstall.ssh.authorized-keys must contain at least one key")
+	}
+	return nil
+}

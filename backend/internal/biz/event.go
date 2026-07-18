@@ -13,22 +13,22 @@ import (
 type Phase string
 
 const (
-	PhaseDHCPDiscover       Phase = "dhcp_discover"
-	PhaseDHCPOffer          Phase = "dhcp_offer"
-	PhaseDHCPAck            Phase = "dhcp_ack"
-	PhaseLeaseGranted       Phase = "lease_granted"
-	PhaseLeaseExpired       Phase = "lease_expired"
-	PhaseTFTPTransfer       Phase = "tftp_transfer"
-	PhaseIPXEScript         Phase = "ipxe_script"
-	PhaseFileServed         Phase = "file_served"
-	PhaseSeedServed         Phase = "seed_served"
-	PhaseInstallReport      Phase = "install_report"
-	PhaseSessionCompleted   Phase = "session_completed"
-	PhaseSessionFailed      Phase = "session_failed"
-	PhaseSessionStale       Phase = "session_stale"
-	PhaseUnknownMachine     Phase = "unknown_machine"
-	PhaseForeignDHCP        Phase = "foreign_dhcp_detected"
-	PhaseConfigChange       Phase = "config_change"
+	PhaseDHCPDiscover     Phase = "dhcp_discover"
+	PhaseDHCPOffer        Phase = "dhcp_offer"
+	PhaseDHCPAck          Phase = "dhcp_ack"
+	PhaseLeaseGranted     Phase = "lease_granted"
+	PhaseLeaseExpired     Phase = "lease_expired"
+	PhaseTFTPTransfer     Phase = "tftp_transfer"
+	PhaseIPXEScript       Phase = "ipxe_script"
+	PhaseFileServed       Phase = "file_served"
+	PhaseSeedServed       Phase = "seed_served"
+	PhaseInstallReport    Phase = "install_report"
+	PhaseSessionCompleted Phase = "session_completed"
+	PhaseSessionFailed    Phase = "session_failed"
+	PhaseSessionStale     Phase = "session_stale"
+	PhaseUnknownMachine   Phase = "unknown_machine"
+	PhaseForeignDHCP      Phase = "foreign_dhcp_detected"
+	PhaseConfigChange     Phase = "config_change"
 )
 
 // Outcome is the result of an event (event_outcome enum in SQL).

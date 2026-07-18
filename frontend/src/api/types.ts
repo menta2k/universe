@@ -30,6 +30,7 @@ export interface Machine {
   readonly notes: string
   readonly created_at: string
   readonly updated_at: string
+  readonly active_session_id: string | null
 }
 
 export type UbuntuRelease = 'jammy' | 'noble'

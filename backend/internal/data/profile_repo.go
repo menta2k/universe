@@ -1,0 +1,122 @@
+package data
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"github.com/jackc/pgx/v5"
+
+	"universe/backend/internal/biz"
+)
+
+// ProfileRepo is the pgx implementation of biz.ProfileRepo (US1 subset:
+// create/get/list; full lifecycle arrives with US2).
+type ProfileRepo struct {
+	data *Data
+}
+
+func NewProfileRepo(d *Data) *ProfileRepo { return &ProfileRepo{data: d} }
+
+const profileCols = `p.id, p.name, p.version, p.ubuntu_release, p.storage_layout,
+	p.network_config, p.packages, p.ssh_authorized_keys, coalesce(p.user_data_template,''),
+	p.late_commands, p.kernel_cmdline_extra, p.created_at, p.updated_at,
+	(SELECT count(*) FROM machines m WHERE m.profile_id = p.id)`
+
+func scanProfile(row pgx.Row) (*biz.Profile, error) {
+	var p biz.Profile
+	var storage, network []byte
+	err := row.Scan(&p.ID, &p.Name, &p.Version, &p.UbuntuRelease, &storage,
+		&network, &p.Packages, &p.SSHAuthorizedKeys, &p.UserDataTemplate,
+		&p.LateCommands, &p.KernelCmdlineExtra, &p.CreatedAt, &p.UpdatedAt,
+		&p.AssignedMachines)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, biz.ErrEntityNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("scan profile: %w", err)
+	}
+	if err := json.Unmarshal(storage, &p.StorageLayout); err != nil {
+		return nil, fmt.Errorf("decode storage layout: %w", err)
+	}
+	if len(network) > 0 && string(network) != "{}" {
+		if err := json.Unmarshal(network, &p.NetworkConfig); err != nil {
+			return nil, fmt.Errorf("decode network config: %w", err)
+		}
+	}
+	return &p, nil
+}
+
+func (r *ProfileRepo) GetByID(ctx context.Context, id string) (*biz.Profile, error) {
+	return scanProfile(r.data.Pool.QueryRow(ctx,
+		`SELECT `+profileCols+` FROM profiles p WHERE p.id = $1`, id))
+}
+
+func (r *ProfileRepo) List(ctx context.Context, page, pageSize int) ([]*biz.Profile, int64, error) {
+	var total int64
+	if err := r.data.Pool.QueryRow(ctx, `SELECT count(*) FROM profiles`).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count profiles: %w", err)
+	}
+	p, size := normalizePage(page, pageSize)
+	rows, err := r.data.Pool.Query(ctx,
+		`SELECT `+profileCols+` FROM profiles p ORDER BY p.name LIMIT $1 OFFSET $2`,
+		size, (p-1)*size)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list profiles: %w", err)
+	}
+	defer rows.Close()
+	var out []*biz.Profile
+	for rows.Next() {
+		pr, err := scanProfile(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		out = append(out, pr)
+	}
+	return out, total, rows.Err()
+}
+
+func (r *ProfileRepo) Create(ctx context.Context, p *biz.Profile) (*biz.Profile, error) {
+	storage, err := json.Marshal(p.StorageLayout)
+	if err != nil {
+		return nil, fmt.Errorf("marshal storage layout: %w", err)
+	}
+	network, err := json.Marshal(orEmptyMap(p.NetworkConfig))
+	if err != nil {
+		return nil, fmt.Errorf("marshal network config: %w", err)
+	}
+	created, err := scanProfile(r.data.Pool.QueryRow(ctx,
+		`INSERT INTO profiles (name, ubuntu_release, storage_layout, network_config,
+		   packages, ssh_authorized_keys, user_data_template, late_commands, kernel_cmdline_extra)
+		 VALUES ($1, $2::ubuntu_release, $3, $4, $5, $6, NULLIF($7,''), $8, $9)
+		 RETURNING `+profileColsSelf,
+		p.Name, string(p.UbuntuRelease), storage, network, orEmptySlice(p.Packages),
+		p.SSHAuthorizedKeys, p.UserDataTemplate, orEmptySlice(p.LateCommands),
+		p.KernelCmdlineExtra))
+	if err != nil {
+		return nil, wrapConstraint(err, map[string]string{
+			"profiles_name_key": "profile name already in use",
+		})
+	}
+	return created, nil
+}
+
+// profileColsSelf is profileCols without the table alias, for RETURNING.
+const profileColsSelf = `id, name, version, ubuntu_release, storage_layout,
+	network_config, packages, ssh_authorized_keys, coalesce(user_data_template,''),
+	late_commands, kernel_cmdline_extra, created_at, updated_at, 0::bigint`
+
+func orEmptyMap(m map[string]any) map[string]any {
+	if m == nil {
+		return map[string]any{}
+	}
+	return m
+}
+
+func orEmptySlice(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}

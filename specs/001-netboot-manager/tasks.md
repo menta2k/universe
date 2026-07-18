@@ -63,31 +63,31 @@ fully unattended Ubuntu 24.04 install; machine shows `installed`; SSH with profi
 
 ### Tests for User Story 1 (write FIRST, must FAIL) ⚠️
 
-- [ ] T017 [P] [US1] Unit tests for DHCP packet decisions (netboot-client detection opts 60/93/94/97, arch→bootfile map, option 77 loop-break, giaddr/broadcast reply targeting, unknown-MAC denial) in `backend/internal/netboot/dhcp/handler_test.go`
-- [ ] T018 [P] [US1] Unit tests for lease pool (allocate from range, reservation honored, TTL, no double-allocation, Valkey keys `lease:*`) in `backend/internal/netboot/dhcp/leasepool_test.go`
-- [ ] T019 [P] [US1] Unit tests for autoinstall rendering (strict template, schema validation, one-time credentials injected, newline-rejection in cmdline, invalid profile → error not partial doc) in `backend/internal/netboot/autoinstall/render_test.go`
-- [ ] T020 [P] [US1] Unit tests for machine + session usecases (register, assign profile, provision opens single active session, state transitions, cancel) in `backend/internal/biz/{machine_test.go,session_test.go}`
-- [ ] T021 [P] [US1] Integration test: real DHCPv4 exchange over loopback using insomniacslk client (DISCOVER→OFFER→REQUEST→ACK with boot options for armed machine; no boot options for unarmed; nothing for unknown) in `backend/tests/integration/dhcp_test.go`
-- [ ] T022 [P] [US1] Integration test: TFTP fetch of iPXE binary via pin/tftp client + transfer logged in `backend/tests/integration/tftp_test.go`
-- [ ] T023 [P] [US1] Integration test: boot HTTP flow (ipxe script → files with Content-Length → seed with single-use token → report transitions session/machine states; expired token → 403) in `backend/tests/integration/bootflow_test.go`
-- [ ] T024 [P] [US1] API contract tests for MachineService (CRUD, provision 409 on active session, provision 412 when DHCP disabled) in `backend/tests/integration/machine_api_test.go`
+- [X] T017 [P] [US1] Unit tests for DHCP packet decisions (netboot-client detection opts 60/93/94/97, arch→bootfile map, option 77 loop-break, giaddr/broadcast reply targeting, unknown-MAC denial) in `backend/internal/netboot/dhcp/handler_test.go`
+- [X] T018 [P] [US1] Unit tests for lease pool (allocate from range, reservation honored, TTL, no double-allocation, Valkey keys `lease:*`) in `backend/internal/netboot/dhcp/leasepool_test.go`
+- [X] T019 [P] [US1] Unit tests for autoinstall rendering (strict template, schema validation, one-time credentials injected, newline-rejection in cmdline, invalid profile → error not partial doc) in `backend/internal/netboot/autoinstall/render_test.go`
+- [X] T020 [P] [US1] Unit tests for machine + session usecases (register, assign profile, provision opens single active session, state transitions, cancel) in `backend/internal/biz/{machine_test.go,session_test.go}`
+- [~] T021 [P] [US1] Integration test: real DHCPv4 exchange over loopback using insomniacslk client (DISCOVER→OFFER→REQUEST→ACK with boot options for armed machine; no boot options for unarmed; nothing for unknown) in `backend/tests/integration/dhcp_test.go` — BLOCKED: needs a real network interface/veth (not available in this sandbox); DHCP decision + handler logic covered by unit tests (decision_test.go, server_test.go)
+- [X] T022 [P] [US1] Integration test: TFTP fetch of iPXE binary via pin/tftp client + transfer logged in `backend/tests/integration/tftp_test.go`
+- [X] T023 [P] [US1] Integration test: boot HTTP flow (ipxe script → files with Content-Length → seed with single-use token → report transitions session/machine states; expired token → 403) in `backend/tests/integration/bootflow_test.go`
+- [X] T024 [P] [US1] API contract tests for MachineService (CRUD, provision 409 on active session, provision 412 when DHCP disabled) in `backend/tests/integration/machine_api_test.go`
 
 ### Implementation for User Story 1
 
-- [ ] T025 [P] [US1] Machine entity + repo interface in `backend/internal/biz/machine.go`; pgx repo in `backend/internal/data/machine_repo.go` (immutable update pattern, state machine per data-model.md)
-- [ ] T026 [P] [US1] Session entity + usecase in `backend/internal/biz/session.go` (open/complete/fail/cancel, one-active enforcement, evidence jsonb); repo in `backend/internal/data/session_repo.go`
-- [ ] T027 [P] [US1] Minimal profile entity + repo (create/get/assign only — full mgmt is US2) in `backend/internal/biz/profile.go` and `backend/internal/data/profile_repo.go`
-- [ ] T028 [US1] Lease pool on Valkey in `backend/internal/netboot/dhcp/leasepool.go` (allocate/renew/release, reservation lookup, mirror grants to events)
-- [ ] T029 [US1] DHCP server + reservation handler in `backend/internal/netboot/dhcp/{server.go,handler.go}`: insomniacslk server4 with x/net ipv4 control messages, netboot decision per contracts/boot-protocols.md §1, arch detection, machine firmware auto-update, enabled-flag gate (starts only when dhcp_config.enabled)
-- [ ] T030 [US1] TFTP server in `backend/internal/netboot/tftp/server.go`: pin/tftp read-only, filename allowlist (embedded iPXE + ipxe_bin artifacts), blksize/tsize, RRQ logging to tftp_transfers
-- [ ] T031 [US1] Autoinstall renderer in `backend/internal/netboot/autoinstall/render.go`: text/template `missingkey=error`, default document builder per contracts/boot-protocols.md §4, YAML parse + autoinstall schema validation, per-session one-time credentials
-- [ ] T032 [US1] Seed token store (Valkey `seedtoken:*`, 30-min TTL, single-use semantics) in `backend/internal/netboot/bootsrv/token.go`
-- [ ] T033 [US1] Boot HTTP server in `backend/internal/netboot/bootsrv/server.go` + handlers `{ipxe.go,files.go,seed.go,report.go}` per contracts/boot-protocols.md §3 (Content-Length, SHA-256 spot check, phase events with session correlation ID)
-- [ ] T034 [US1] Minimal artifact store (filesystem write/read + sha256, seed via CLI/config for US1; full mgmt is US4) in `backend/internal/data/artifact_store.go` and `backend/internal/biz/artifact.go`
-- [ ] T035 [US1] MachineService (Kratos) in `backend/internal/service/machine_service.go`: List/Get/Create/Update/Delete/Provision/Cancel/ListUnknownBoots/RegisterFromUnknown wired to biz; register in `backend/internal/server/http.go`
-- [ ] T036 [US1] Unknown-boot capture: record `unknown_machine` events from DHCP handler and expose via ListUnknownBoots in `backend/internal/biz/machine.go` (query over provisioning_events)
-- [ ] T037 [US1] Frontend Machines page in `frontend/src/pages/MachinesPage.vue` + `frontend/src/stores/machines.ts`: list with state chips, register dialog (MAC/name/profile/reservation), Provision/Cancel actions, unknown-boots tab with Register action; component test `frontend/tests/unit/machines.spec.ts`
-- [ ] T038 [US1] E2E harness: QEMU scripts `backend/tests/e2e/scripts/{boot-vm.sh,netenv-up.sh}` (isolated bridge, BIOS + OVMF) and Go E2E test `backend/tests/e2e/install_test.go` asserting full unattended install + report callback (quickstart Scenario 1)
+- [X] T025 [P] [US1] Machine entity + repo interface in `backend/internal/biz/machine.go`; pgx repo in `backend/internal/data/machine_repo.go` (immutable update pattern, state machine per data-model.md)
+- [X] T026 [P] [US1] Session entity + usecase in `backend/internal/biz/session.go` (open/complete/fail/cancel, one-active enforcement, evidence jsonb); repo in `backend/internal/data/session_repo.go`
+- [X] T027 [P] [US1] Minimal profile entity + repo (create/get/assign only — full mgmt is US2) in `backend/internal/biz/profile.go` and `backend/internal/data/profile_repo.go`
+- [X] T028 [US1] Lease pool on Valkey in `backend/internal/netboot/dhcp/leasepool.go` (allocate/renew/release, reservation lookup, mirror grants to events)
+- [X] T029 [US1] DHCP server + reservation handler in `backend/internal/netboot/dhcp/{server.go,handler.go}`: insomniacslk server4 with x/net ipv4 control messages, netboot decision per contracts/boot-protocols.md §1, arch detection, machine firmware auto-update, enabled-flag gate (starts only when dhcp_config.enabled)
+- [X] T030 [US1] TFTP server in `backend/internal/netboot/tftp/server.go`: pin/tftp read-only, filename allowlist (embedded iPXE + ipxe_bin artifacts), blksize/tsize, RRQ logging to tftp_transfers
+- [X] T031 [US1] Autoinstall renderer in `backend/internal/netboot/autoinstall/render.go`: text/template `missingkey=error`, default document builder per contracts/boot-protocols.md §4, YAML parse + autoinstall schema validation, per-session one-time credentials
+- [X] T032 [US1] Seed token store (Valkey `seedtoken:*`, 30-min TTL, single-use semantics) in `backend/internal/netboot/bootsrv/token.go`
+- [X] T033 [US1] Boot HTTP server in `backend/internal/netboot/bootsrv/server.go` + handlers `{ipxe.go,files.go,seed.go,report.go}` per contracts/boot-protocols.md §3 (Content-Length, SHA-256 spot check, phase events with session correlation ID)
+- [X] T034 [US1] Minimal artifact store (filesystem write/read + sha256, seed via CLI/config for US1; full mgmt is US4) in `backend/internal/data/artifact_store.go` and `backend/internal/biz/artifact.go`
+- [X] T035 [US1] MachineService (Kratos) in `backend/internal/service/machine_service.go`: List/Get/Create/Update/Delete/Provision/Cancel/ListUnknownBoots/RegisterFromUnknown wired to biz; register in `backend/internal/server/http.go`
+- [X] T036 [US1] Unknown-boot capture: record `unknown_machine` events from DHCP handler and expose via ListUnknownBoots in `backend/internal/biz/machine.go` (query over provisioning_events)
+- [X] T037 [US1] Frontend Machines page in `frontend/src/pages/MachinesPage.vue` + `frontend/src/stores/machines.ts`: list with state chips, register dialog (MAC/name/profile/reservation), Provision/Cancel actions, unknown-boots tab with Register action; component test `frontend/tests/unit/machines.spec.ts`
+- [~] T038 [US1] E2E harness: QEMU scripts `backend/tests/e2e/scripts/{boot-vm.sh,netenv-up.sh}` (isolated bridge, BIOS + OVMF) and Go E2E test `backend/tests/e2e/install_test.go` asserting full unattended install + report callback (quickstart Scenario 1) — DEFERRED: requires QEMU/KVM + isolated bridge; harness scripts to be added, cannot execute in this sandbox
 
 **Checkpoint**: MVP — quickstart Scenario 1 passes on BIOS and UEFI using API/CLI equivalents for steps 1–3 (upload/profile/DHCP UIs arrive in US2–US4); Scenario 3 passes in full
 

@@ -6,6 +6,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['tests/**/*.spec.ts'],
+    // Process vuetify through Vite so its .css imports resolve in tests.
+    server: { deps: { inline: ['vuetify'] } },
     coverage: {
       provider: 'v8',
       include: ['src/**'],

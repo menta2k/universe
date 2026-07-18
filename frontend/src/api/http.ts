@@ -12,10 +12,17 @@ export interface ApiMeta {
   readonly page_size: number
 }
 
+/** Structured error emitted by the backend for typed failures (e.g. 422). */
+interface EnvelopeErrorObject {
+  readonly reason?: string
+  readonly message?: string
+  readonly details?: Readonly<Record<string, string>>
+}
+
 interface Envelope<T> {
   readonly success: boolean
   readonly data: T | null
-  readonly error: string | null
+  readonly error: string | EnvelopeErrorObject | null
   readonly meta?: ApiMeta
 }
 
@@ -23,6 +30,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** Per-field validation messages from 422 responses (field -> message). */
+    readonly details?: Readonly<Record<string, string>>,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -105,9 +114,20 @@ async function execute(path: string, options: RequestOptions): Promise<Envelope<
 
   const envelope = await parseEnvelope(response)
   if (!response.ok || !envelope.success) {
-    throw new ApiError(envelope.error ?? `Request failed (HTTP ${response.status})`, response.status)
+    throw toApiError(envelope.error, response.status)
   }
   return envelope
+}
+
+/** Build an ApiError from either the legacy string error or the structured object form. */
+function toApiError(error: string | EnvelopeErrorObject | null, status: number): ApiError {
+  const fallback = `Request failed (HTTP ${status})`
+  if (error === null) return new ApiError(fallback, status)
+  if (typeof error === 'string') return new ApiError(error, status)
+  const message = error.message || error.reason || fallback
+  const details =
+    error.details && Object.keys(error.details).length > 0 ? { ...error.details } : undefined
+  return new ApiError(message, status, details)
 }
 
 /** Perform a request and return the unwrapped `data` payload. */

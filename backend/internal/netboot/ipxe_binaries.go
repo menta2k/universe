@@ -9,10 +9,10 @@ import (
 // iPXE binary names served over TFTP/HTTP; keys are the exact filenames
 // referenced in DHCP boot options (contracts/boot-protocols.md).
 const (
-	IPXEBinBIOS    = "undionly.kpxe"
-	IPXEBinUEFI    = "ipxe.efi"
-	IPXEBinARM64   = "snp.efi"
-	IPXEUserClass  = "iPXE" // option 77 value emitted by iPXE builds
+	IPXEBinBIOS   = "undionly.kpxe"
+	IPXEBinUEFI   = "ipxe.efi"
+	IPXEBinARM64  = "snp.efi"
+	IPXEUserClass = "iPXE" // option 77 value emitted by iPXE builds
 )
 
 // IPXEBinaries maps served filename -> embedded binary content.
