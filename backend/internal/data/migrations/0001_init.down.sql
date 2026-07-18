@@ -1,0 +1,14 @@
+DROP TABLE IF EXISTS provisioning_sessions;
+DROP TABLE IF EXISTS boot_artifacts;
+DROP TABLE IF EXISTS dhcp_reservations;
+DROP TABLE IF EXISTS dhcp_subnets;
+DROP TABLE IF EXISTS dhcp_config;
+DROP TABLE IF EXISTS machines;
+DROP TABLE IF EXISTS profile_revisions;
+DROP TABLE IF EXISTS profiles;
+DROP TABLE IF EXISTS operators;
+DROP TYPE IF EXISTS artifact_kind;
+DROP TYPE IF EXISTS session_state;
+DROP TYPE IF EXISTS ubuntu_release;
+DROP TYPE IF EXISTS provision_state;
+DROP TYPE IF EXISTS firmware_type;

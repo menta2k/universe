@@ -1,0 +1,32 @@
+# Go
+backend/bin/
+backend/coverage.out
+*.test
+*.out
+
+# Node
+node_modules/
+frontend/dist/
+frontend/coverage/
+*.log
+
+# Env / secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Artifacts / runtime data
+data/artifacts/
+deploy/volumes/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+
+# E2E scratch
+backend/tests/e2e/.work/

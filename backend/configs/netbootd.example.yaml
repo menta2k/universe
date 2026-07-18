@@ -1,0 +1,32 @@
+server:
+  http_addr: ":8080"
+  grpc_addr: ":9090"
+  boot_http_addr: ":8082"
+  # URL booting machines use to reach this host (DHCP options / iPXE scripts).
+  external_boot_url: "http://192.168.90.1:8082"
+
+database:
+  dsn: "postgres://netboot:netboot-dev@localhost:5432/netboot?sslmode=disable"
+
+valkey:
+  addr: "localhost:6379"
+
+artifacts:
+  root: "./data/artifacts"
+  max_upload_bytes: 4294967296
+
+netboot:
+  dhcp_interface: "eth1"
+  dhcp_addr: ":67"
+  tftp_addr: ":69"
+  stale_session_timeout: "60m"
+  seed_token_ttl: "30m"
+  lease_ttl: "1h"
+
+events:
+  retention_days: 90
+
+# Created on first start if no operator exists. Change the password immediately.
+bootstrap_operator:
+  username: "admin"
+  password: "change-me-please"

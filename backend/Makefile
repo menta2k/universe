@@ -1,0 +1,42 @@
+GOBIN := $(shell go env GOPATH)/bin
+COVER_THRESHOLD := 80
+
+.PHONY: proto
+proto: ## generate API code from proto definitions
+	buf generate
+
+.PHONY: lint
+lint:
+	golangci-lint run ./...
+
+.PHONY: build
+build:
+	mkdir -p bin && go build -o bin/netbootd ./cmd/netbootd
+
+.PHONY: run
+run: build
+	./bin/netbootd -conf configs/netbootd.example.yaml
+
+.PHONY: migrate
+migrate:
+	go run ./cmd/netbootd migrate -conf configs/netbootd.example.yaml
+
+.PHONY: test
+test:
+	go test -race -coverprofile=coverage.out -covermode=atomic ./internal/... ./tests/integration/...
+	@$(MAKE) --no-print-directory coverage-check
+
+.PHONY: coverage-check
+coverage-check:
+	@total=$$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$$3); print $$3}'); \
+	echo "total coverage: $${total}%"; \
+	awk -v t="$$total" -v min=$(COVER_THRESHOLD) 'BEGIN { exit (t+0 < min) ? 1 : 0 }' || \
+	  { echo "FAIL: coverage $${total}% is below $(COVER_THRESHOLD)%"; exit 1; }
+
+.PHONY: test-e2e
+test-e2e:
+	go test -tags e2e -timeout 60m ./tests/e2e/...
+
+.PHONY: coverage
+coverage: test
+	go tool cover -html=coverage.out -o coverage.html
