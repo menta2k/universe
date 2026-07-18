@@ -23,8 +23,13 @@ migrate:
 
 .PHONY: test
 test:
-	go test -race -coverprofile=coverage.out -covermode=atomic ./internal/... ./tests/integration/...
+	go test -race -timeout 900s -coverpkg=./internal/... \
+	  -coverprofile=coverage.out -covermode=atomic ./internal/... ./tests/integration/...
 	@$(MAKE) --no-print-directory coverage-check
+
+.PHONY: test-unit
+test-unit:
+	go test -race ./internal/...
 
 .PHONY: coverage-check
 coverage-check:
