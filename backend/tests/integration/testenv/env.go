@@ -16,6 +16,7 @@ import (
 
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"github.com/valkey-io/valkey-go"
 
 	"universe/backend/internal/conf"
 	"universe/backend/internal/data"
@@ -86,6 +87,65 @@ func Start(t *testing.T) *Env {
 	t.Cleanup(cleanup)
 
 	return &Env{DSN: dsn, ValkeyAddr: cfg.Valkey.Addr, Data: d}
+}
+
+var (
+	vkOnce   sync.Once
+	vkShared struct {
+		host, port  string
+		err         error
+		unavailable bool
+	}
+)
+
+// StartValkey boots a single throwaway Valkey (shared per test binary) and
+// returns a client with a freshly flushed keyspace. Unlike Start it does not
+// provision Postgres, so packages that only need Valkey stay lightweight and
+// avoid the cost/flakiness of booting the full stack.
+func StartValkey(t *testing.T) valkey.Client {
+	t.Helper()
+	vkOnce.Do(bootValkey)
+	if vkShared.unavailable {
+		t.Skipf("docker not available, skipping integration test: %v", vkShared.err)
+	}
+	if vkShared.err != nil {
+		t.Fatalf("shared valkey failed: %v", vkShared.err)
+	}
+
+	client, err := valkey.NewClient(valkey.ClientOption{
+		InitAddress: []string{fmt.Sprintf("%s:%s", vkShared.host, vkShared.port)},
+	})
+	if err != nil {
+		t.Fatalf("connect valkey: %v", err)
+	}
+	if err := client.Do(context.Background(), client.B().Flushdb().Build()).Error(); err != nil {
+		client.Close()
+		t.Fatalf("flush valkey: %v", err)
+	}
+	t.Cleanup(client.Close)
+	return client
+}
+
+func bootValkey() {
+	ctx := context.Background()
+	if _, err := testcontainers.NewDockerProvider(); err != nil {
+		vkShared.unavailable = true
+		vkShared.err = err
+		return
+	}
+	vk, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		Started: true,
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        "valkey/valkey:8.0",
+			ExposedPorts: []string{"6379/tcp"},
+			WaitingFor:   wait.ForListeningPort("6379/tcp").WithStartupTimeout(time.Minute),
+		},
+	})
+	if err != nil {
+		vkShared.err = fmt.Errorf("start valkey: %w", err)
+		return
+	}
+	vkShared.host, vkShared.port = hostPort(ctx, vk, "6379/tcp")
 }
 
 func bootShared() {
