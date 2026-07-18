@@ -198,7 +198,12 @@ func (f *fakeProfileRepo) GetByID(_ context.Context, id string) (*Profile, error
 }
 
 func (f *fakeProfileRepo) List(_ context.Context, _, _ int) ([]*Profile, int64, error) {
-	return nil, 0, nil
+	out := make([]*Profile, 0, len(f.byID))
+	for _, p := range f.byID {
+		cp := *p
+		out = append(out, &cp)
+	}
+	return out, int64(len(out)), nil
 }
 
 func (f *fakeProfileRepo) Create(_ context.Context, p *Profile) (*Profile, error) {
