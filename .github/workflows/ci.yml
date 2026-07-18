@@ -16,6 +16,8 @@ jobs:
         with: { go-version: "1.24", cache-dependency-path: backend/go.sum }
       - name: Verify generated code is up to date
         run: |
+          git clone --depth 1 --branch v2.9.2 https://github.com/go-kratos/kratos /tmp/kratos
+          (cd /tmp/kratos/cmd/protoc-gen-go-http && go install .)
           go run github.com/bufbuild/buf/cmd/buf@v1.50.0 generate
           git diff --exit-code -- api/
       - name: Lint

@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package netboot.v1;
+
+option go_package = "universe/backend/api/netboot/v1;netbootv1";
+
+// PageRequest/PageMeta implement the pagination contract from admin-api.md.
+message PageRequest {
+  int32 page = 1;      // 1-based; 0 means first page
+  int32 page_size = 2; // capped at 200 server-side
+}
+
+message PageMeta {
+  int64 total = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}

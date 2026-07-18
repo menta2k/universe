@@ -1,0 +1,119 @@
+syntax = "proto3";
+
+package netboot.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "netboot/v1/common.proto";
+
+option go_package = "universe/backend/api/netboot/v1;netbootv1";
+
+service MachineService {
+  rpc ListMachines(ListMachinesRequest) returns (ListMachinesReply) {
+    option (google.api.http) = {get: "/api/v1/machines"};
+  }
+  rpc GetMachine(GetMachineRequest) returns (Machine) {
+    option (google.api.http) = {get: "/api/v1/machines/{id}"};
+  }
+  rpc CreateMachine(CreateMachineRequest) returns (Machine) {
+    option (google.api.http) = {
+      post: "/api/v1/machines"
+      body: "*"
+    };
+  }
+  rpc UpdateMachine(UpdateMachineRequest) returns (Machine) {
+    option (google.api.http) = {
+      patch: "/api/v1/machines/{id}"
+      body: "*"
+    };
+  }
+  rpc DeleteMachine(GetMachineRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {delete: "/api/v1/machines/{id}"};
+  }
+  rpc Provision(GetMachineRequest) returns (Machine) {
+    option (google.api.http) = {
+      post: "/api/v1/machines/{id}/provision"
+      body: "*"
+    };
+  }
+  rpc CancelProvision(GetMachineRequest) returns (Machine) {
+    option (google.api.http) = {
+      post: "/api/v1/machines/{id}/cancel"
+      body: "*"
+    };
+  }
+  rpc ListUnknownBoots(PageRequest) returns (ListUnknownBootsReply) {
+    option (google.api.http) = {get: "/api/v1/machines/unknown"};
+  }
+  rpc RegisterFromUnknown(RegisterFromUnknownRequest) returns (Machine) {
+    option (google.api.http) = {
+      post: "/api/v1/machines/register-unknown"
+      body: "*"
+    };
+  }
+}
+
+message Machine {
+  string id = 1;
+  string mac = 2;
+  string name = 3;
+  string firmware = 4;        // bios | uefi_x64 | unknown
+  string profile_id = 5;      // empty when unassigned
+  string reservation_ip = 6;  // empty when none
+  string provision_state = 7; // new | ready | installing | installed | failed
+  string notes = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  string active_session_id = 11; // empty when no active session
+}
+
+message ListMachinesRequest {
+  PageRequest page = 1;
+  string state = 2;      // filter by provision_state
+  string profile_id = 3; // filter by assigned profile
+  string q = 4;          // name/mac substring
+}
+
+message ListMachinesReply {
+  repeated Machine machines = 1;
+  PageMeta meta = 2;
+}
+
+message GetMachineRequest {
+  string id = 1;
+}
+
+message CreateMachineRequest {
+  string mac = 1;
+  string name = 2;
+  string firmware = 3;
+  string profile_id = 4;
+  string reservation_ip = 5;
+  string notes = 6;
+}
+
+message UpdateMachineRequest {
+  string id = 1;
+  optional string name = 2;
+  optional string profile_id = 3;
+  optional string reservation_ip = 4;
+  optional string notes = 5;
+}
+
+message UnknownBoot {
+  string mac = 1;
+  google.protobuf.Timestamp last_seen = 2;
+  int64 attempts = 3;
+}
+
+message ListUnknownBootsReply {
+  repeated UnknownBoot boots = 1;
+  PageMeta meta = 2;
+}
+
+message RegisterFromUnknownRequest {
+  string mac = 1;
+  string name = 2;
+  string profile_id = 3;
+}

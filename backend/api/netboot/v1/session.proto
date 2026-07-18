@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package netboot.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "netboot/v1/common.proto";
+
+option go_package = "universe/backend/api/netboot/v1;netbootv1";
+
+// The SSE stream (GET /api/v1/events/stream) is a plain HTTP endpoint
+// registered alongside the Kratos router; it is documented in
+// contracts/admin-api.md and not expressible as a unary RPC.
+service SessionService {
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsReply) {
+    option (google.api.http) = {get: "/api/v1/sessions"};
+  }
+  rpc GetSession(GetSessionRequest) returns (SessionDetail) {
+    option (google.api.http) = {get: "/api/v1/sessions/{id}"};
+  }
+}
+
+message ProvisioningSession {
+  string id = 1;
+  string machine_id = 2;
+  string machine_name = 3;
+  string machine_mac = 4;
+  string profile_id = 5;
+  int32 profile_version = 6;
+  string state = 7; // active | completed | failed | stale
+  google.protobuf.Timestamp started_at = 8;
+  google.protobuf.Timestamp ended_at = 9;
+  string failure_phase = 10;
+}
+
+message ProvisioningEvent {
+  google.protobuf.Timestamp time = 1;
+  string session_id = 2;
+  string machine_mac = 3;
+  string phase = 4;
+  string outcome = 5; // ok | error | denied
+  string detail = 6;  // JSON
+}
+
+message ListSessionsRequest {
+  PageRequest page = 1;
+  string machine_id = 2;
+  string state = 3;
+}
+
+message ListSessionsReply {
+  repeated ProvisioningSession sessions = 1;
+  PageMeta meta = 2;
+}
+
+message GetSessionRequest {
+  string id = 1;
+}
+
+message SessionDetail {
+  ProvisioningSession session = 1;
+  repeated ProvisioningEvent timeline = 2;
+  string evidence = 3; // JSON
+}

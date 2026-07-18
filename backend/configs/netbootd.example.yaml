@@ -6,10 +6,10 @@ server:
   external_boot_url: "http://192.168.90.1:8082"
 
 database:
-  dsn: "postgres://netboot:netboot-dev@localhost:5432/netboot?sslmode=disable"
+  dsn: "postgres://netboot:netboot-dev@localhost:5433/netboot?sslmode=disable"
 
 valkey:
-  addr: "localhost:6379"
+  addr: "localhost:6380"
 
 artifacts:
   root: "./data/artifacts"

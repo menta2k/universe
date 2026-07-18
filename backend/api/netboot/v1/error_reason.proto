@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package netboot.v1;
+
+option go_package = "universe/backend/api/netboot/v1;netbootv1";
+
+// ErrorReason values map to HTTP status codes in internal/server/errors.go:
+// VALIDATION_FAILED=422, NOT_FOUND=404, CONFLICT=409, UNAUTHENTICATED=401,
+// PERMISSION_DENIED=403, DHCP_DISABLED=412.
+enum ErrorReason {
+  ERROR_REASON_UNSPECIFIED = 0;
+  VALIDATION_FAILED = 1;
+  NOT_FOUND = 2;
+  CONFLICT = 3;
+  UNAUTHENTICATED = 4;
+  PERMISSION_DENIED = 5;
+  DHCP_DISABLED = 6;
+}

@@ -1,0 +1,104 @@
+syntax = "proto3";
+
+package netboot.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "netboot/v1/common.proto";
+
+option go_package = "universe/backend/api/netboot/v1;netbootv1";
+
+service ProfileService {
+  rpc ListProfiles(PageRequest) returns (ListProfilesReply) {
+    option (google.api.http) = {get: "/api/v1/profiles"};
+  }
+  rpc GetProfile(GetProfileRequest) returns (Profile) {
+    option (google.api.http) = {get: "/api/v1/profiles/{id}"};
+  }
+  rpc CreateProfile(ProfileInput) returns (Profile) {
+    option (google.api.http) = {
+      post: "/api/v1/profiles"
+      body: "*"
+    };
+  }
+  rpc UpdateProfile(UpdateProfileRequest) returns (Profile) {
+    option (google.api.http) = {
+      put: "/api/v1/profiles/{id}"
+      body: "*"
+    };
+  }
+  rpc CloneProfile(CloneProfileRequest) returns (Profile) {
+    option (google.api.http) = {
+      post: "/api/v1/profiles/{id}/clone"
+      body: "*"
+    };
+  }
+  rpc DeleteProfile(GetProfileRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {delete: "/api/v1/profiles/{id}"};
+  }
+  rpc PreviewProfile(PreviewProfileRequest) returns (PreviewProfileReply) {
+    option (google.api.http) = {
+      post: "/api/v1/profiles/{id}/preview"
+      body: "*"
+    };
+  }
+}
+
+message Profile {
+  string id = 1;
+  string name = 2;
+  int32 version = 3;
+  string ubuntu_release = 4; // jammy | noble
+  string storage_layout = 5; // JSON: {mode: lvm|direct|custom, custom: ...}
+  string network_config = 6; // JSON, netplan-shaped
+  repeated string packages = 7;
+  repeated string ssh_authorized_keys = 8;
+  string user_data_template = 9;
+  repeated string late_commands = 10;
+  string kernel_cmdline_extra = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+  int64 assigned_machines = 14;
+}
+
+message ProfileInput {
+  string name = 1;
+  string ubuntu_release = 2;
+  string storage_layout = 3;
+  string network_config = 4;
+  repeated string packages = 5;
+  repeated string ssh_authorized_keys = 6;
+  string user_data_template = 7;
+  repeated string late_commands = 8;
+  string kernel_cmdline_extra = 9;
+}
+
+message GetProfileRequest {
+  string id = 1;
+}
+
+message UpdateProfileRequest {
+  string id = 1;
+  ProfileInput profile = 2;
+}
+
+message CloneProfileRequest {
+  string id = 1;
+  string new_name = 2;
+}
+
+message PreviewProfileRequest {
+  string id = 1;
+  string machine_id = 2; // optional; fixture machine used when empty
+}
+
+message PreviewProfileReply {
+  string user_data = 1; // rendered autoinstall YAML, credentials redacted
+  string cmdline = 2;
+}
+
+message ListProfilesReply {
+  repeated Profile profiles = 1;
+  PageMeta meta = 2;
+}

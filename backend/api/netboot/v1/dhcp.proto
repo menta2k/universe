@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package netboot.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "netboot/v1/common.proto";
+
+option go_package = "universe/backend/api/netboot/v1;netbootv1";
+
+service DhcpService {
+  rpc GetDhcpConfig(google.protobuf.Empty) returns (DhcpConfig) {
+    option (google.api.http) = {get: "/api/v1/dhcp/config"};
+  }
+  rpc UpdateDhcpConfig(UpdateDhcpConfigRequest) returns (DhcpConfig) {
+    option (google.api.http) = {
+      put: "/api/v1/dhcp/config"
+      body: "*"
+    };
+  }
+  rpc EnableDhcp(google.protobuf.Empty) returns (DhcpConfig) {
+    option (google.api.http) = {
+      post: "/api/v1/dhcp/enable"
+      body: "*"
+    };
+  }
+  rpc DisableDhcp(google.protobuf.Empty) returns (DhcpConfig) {
+    option (google.api.http) = {
+      post: "/api/v1/dhcp/disable"
+      body: "*"
+    };
+  }
+  rpc ListLeases(PageRequest) returns (ListLeasesReply) {
+    option (google.api.http) = {get: "/api/v1/dhcp/leases"};
+  }
+  rpc ListForeignServers(PageRequest) returns (ListForeignServersReply) {
+    option (google.api.http) = {get: "/api/v1/dhcp/conflicts"};
+  }
+}
+
+message DhcpSubnet {
+  string id = 1;
+  string network = 2; // CIDR
+  string range_start = 3;
+  string range_end = 4;
+  string gateway = 5;
+  repeated string dns = 6;
+}
+
+message DhcpConfig {
+  bool enabled = 1;
+  int32 version = 2;
+  int32 lease_ttl_seconds = 3;
+  repeated DhcpSubnet subnets = 4;
+  google.protobuf.Timestamp updated_at = 5;
+}
+
+message UpdateDhcpConfigRequest {
+  int32 lease_ttl_seconds = 1;
+  repeated DhcpSubnet subnets = 2;
+}
+
+message Lease {
+  string ip = 1;
+  string mac = 2;
+  string machine_id = 3;
+  string machine_name = 4;
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+message ListLeasesReply {
+  repeated Lease leases = 1;
+  PageMeta meta = 2;
+}
+
+message ForeignServer {
+  string server_id = 1;
+  google.protobuf.Timestamp last_seen = 2;
+  int64 offers_seen = 3;
+}
+
+message ListForeignServersReply {
+  repeated ForeignServer servers = 1;
+  PageMeta meta = 2;
+}
