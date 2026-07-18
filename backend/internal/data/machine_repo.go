@@ -20,7 +20,7 @@ type MachineRepo struct {
 func NewMachineRepo(d *Data) *MachineRepo { return &MachineRepo{data: d} }
 
 const machineCols = `id, mac::text, name, firmware, coalesce(profile_id::text,''),
-	coalesce(reservation_ip::text,''), provision_state, notes, created_at, updated_at`
+	coalesce(host(reservation_ip),''), provision_state, notes, created_at, updated_at`
 
 func scanMachine(row pgx.Row) (*biz.Machine, error) {
 	var m biz.Machine

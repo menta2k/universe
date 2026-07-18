@@ -31,8 +31,8 @@ func (r *DhcpConfigRepo) Get(ctx context.Context) (*biz.DhcpConfig, error) {
 
 func (r *DhcpConfigRepo) subnets(ctx context.Context) ([]biz.DhcpSubnet, error) {
 	rows, err := r.data.Pool.Query(ctx,
-		`SELECT id, network::text, range_start::text, range_end::text,
-		        coalesce(gateway::text,''), coalesce(array_to_string(dns,','),'')
+		`SELECT id, network::text, host(range_start), host(range_end),
+		        coalesce(host(gateway),''), coalesce(array_to_string(dns,','),'')
 		 FROM dhcp_subnets ORDER BY network`)
 	if err != nil {
 		return nil, fmt.Errorf("list subnets: %w", err)
@@ -100,7 +100,7 @@ func (r *DhcpConfigRepo) ListForeignServers(ctx context.Context, page, pageSize 
 	}
 	p, size := normalizePage(page, pageSize)
 	rows, err := r.data.Pool.Query(ctx,
-		`SELECT server_id::text, extract(epoch FROM max(time))::bigint, count(*)
+		`SELECT host(server_id), extract(epoch FROM max(time))::bigint, count(*)
 		 FROM dhcp_offers_seen GROUP BY server_id ORDER BY max(time) DESC LIMIT $1 OFFSET $2`,
 		size, (p-1)*size)
 	if err != nil {
