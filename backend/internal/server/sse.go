@@ -36,6 +36,11 @@ func (s *EventStreamer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	// Flush headers immediately so the client's request returns and can start
+	// reading; otherwise Receive blocks before any bytes are sent and the
+	// client stalls waiting for the response head.
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
 
 	filterSession := r.URL.Query().Get("session_id")
 	filterMachine := r.URL.Query().Get("machine_id") // matched against MAC filter param
