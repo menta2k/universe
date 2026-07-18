@@ -36,6 +36,8 @@ type MachineServiceHTTPServer interface {
 	DeleteMachine(context.Context, *GetMachineRequest) (*emptypb.Empty, error)
 	GetMachine(context.Context, *GetMachineRequest) (*Machine, error)
 	ListMachines(context.Context, *ListMachinesRequest) (*ListMachinesReply, error)
+	// ListUnknownBoots Literal-path routes MUST be declared before the /{id} route so the router
+	// matches them first (otherwise "unknown" is parsed as an id).
 	ListUnknownBoots(context.Context, *PageRequest) (*ListUnknownBootsReply, error)
 	Provision(context.Context, *GetMachineRequest) (*Machine, error)
 	RegisterFromUnknown(context.Context, *RegisterFromUnknownRequest) (*Machine, error)
@@ -45,13 +47,13 @@ type MachineServiceHTTPServer interface {
 func RegisterMachineServiceHTTPServer(s *http.Server, srv MachineServiceHTTPServer) {
 	r := s.Route("/")
 	r.GET("/api/v1/machines", _MachineService_ListMachines0_HTTP_Handler(srv))
+	r.GET("/api/v1/machines/unknown", _MachineService_ListUnknownBoots0_HTTP_Handler(srv))
 	r.GET("/api/v1/machines/{id}", _MachineService_GetMachine0_HTTP_Handler(srv))
 	r.POST("/api/v1/machines", _MachineService_CreateMachine0_HTTP_Handler(srv))
 	r.PATCH("/api/v1/machines/{id}", _MachineService_UpdateMachine0_HTTP_Handler(srv))
 	r.DELETE("/api/v1/machines/{id}", _MachineService_DeleteMachine0_HTTP_Handler(srv))
 	r.POST("/api/v1/machines/{id}/provision", _MachineService_Provision0_HTTP_Handler(srv))
 	r.POST("/api/v1/machines/{id}/cancel", _MachineService_CancelProvision0_HTTP_Handler(srv))
-	r.GET("/api/v1/machines/unknown", _MachineService_ListUnknownBoots0_HTTP_Handler(srv))
 	r.POST("/api/v1/machines/register-unknown", _MachineService_RegisterFromUnknown0_HTTP_Handler(srv))
 }
 
@@ -70,6 +72,25 @@ func _MachineService_ListMachines0_HTTP_Handler(srv MachineServiceHTTPServer) fu
 			return err
 		}
 		reply := out.(*ListMachinesReply)
+		return ctx.Result(200, reply)
+	}
+}
+
+func _MachineService_ListUnknownBoots0_HTTP_Handler(srv MachineServiceHTTPServer) func(ctx http.Context) error {
+	return func(ctx http.Context) error {
+		var in PageRequest
+		if err := ctx.BindQuery(&in); err != nil {
+			return err
+		}
+		http.SetOperation(ctx, OperationMachineServiceListUnknownBoots)
+		h := ctx.Middleware(func(ctx context.Context, req interface{}) (interface{}, error) {
+			return srv.ListUnknownBoots(ctx, req.(*PageRequest))
+		})
+		out, err := h(ctx, &in)
+		if err != nil {
+			return err
+		}
+		reply := out.(*ListUnknownBootsReply)
 		return ctx.Result(200, reply)
 	}
 }
@@ -215,25 +236,6 @@ func _MachineService_CancelProvision0_HTTP_Handler(srv MachineServiceHTTPServer)
 	}
 }
 
-func _MachineService_ListUnknownBoots0_HTTP_Handler(srv MachineServiceHTTPServer) func(ctx http.Context) error {
-	return func(ctx http.Context) error {
-		var in PageRequest
-		if err := ctx.BindQuery(&in); err != nil {
-			return err
-		}
-		http.SetOperation(ctx, OperationMachineServiceListUnknownBoots)
-		h := ctx.Middleware(func(ctx context.Context, req interface{}) (interface{}, error) {
-			return srv.ListUnknownBoots(ctx, req.(*PageRequest))
-		})
-		out, err := h(ctx, &in)
-		if err != nil {
-			return err
-		}
-		reply := out.(*ListUnknownBootsReply)
-		return ctx.Result(200, reply)
-	}
-}
-
 func _MachineService_RegisterFromUnknown0_HTTP_Handler(srv MachineServiceHTTPServer) func(ctx http.Context) error {
 	return func(ctx http.Context) error {
 		var in RegisterFromUnknownRequest
@@ -262,6 +264,8 @@ type MachineServiceHTTPClient interface {
 	DeleteMachine(ctx context.Context, req *GetMachineRequest, opts ...http.CallOption) (rsp *emptypb.Empty, err error)
 	GetMachine(ctx context.Context, req *GetMachineRequest, opts ...http.CallOption) (rsp *Machine, err error)
 	ListMachines(ctx context.Context, req *ListMachinesRequest, opts ...http.CallOption) (rsp *ListMachinesReply, err error)
+	// ListUnknownBoots Literal-path routes MUST be declared before the /{id} route so the router
+	// matches them first (otherwise "unknown" is parsed as an id).
 	ListUnknownBoots(ctx context.Context, req *PageRequest, opts ...http.CallOption) (rsp *ListUnknownBootsReply, err error)
 	Provision(ctx context.Context, req *GetMachineRequest, opts ...http.CallOption) (rsp *Machine, err error)
 	RegisterFromUnknown(ctx context.Context, req *RegisterFromUnknownRequest, opts ...http.CallOption) (rsp *Machine, err error)
@@ -341,6 +345,8 @@ func (c *MachineServiceHTTPClientImpl) ListMachines(ctx context.Context, in *Lis
 	return &out, nil
 }
 
+// ListUnknownBoots Literal-path routes MUST be declared before the /{id} route so the router
+// matches them first (otherwise "unknown" is parsed as an id).
 func (c *MachineServiceHTTPClientImpl) ListUnknownBoots(ctx context.Context, in *PageRequest, opts ...http.CallOption) (*ListUnknownBootsReply, error) {
 	var out ListUnknownBootsReply
 	pattern := "/api/v1/machines/unknown"

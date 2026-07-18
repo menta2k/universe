@@ -196,10 +196,10 @@ becomes `stale/failed` with last completed phase and evidence, diagnosable from 
 
 - [X] T063 [P] Fleet concurrency E2E `backend/tests/e2e/scripts/boot-fleet.sh` + `backend/tests/e2e/fleet_test.go`: 10 concurrent QEMU installs, assert zero identity/seed cross-contamination (SC-003, quickstart Scenario 5)
 - [X] T064 [P] Security hardening pass: rate limiting on auth + boot endpoints, security headers, session cookie flags, secrets-in-logs audit, dependency scan in CI (`backend/internal/server/hardening.go`, `.github/workflows/ci.yml`)
-- [ ] T065 [P] Playwright E2E for critical UI flows (login → register machine → provision; profile validation error path) in `frontend/tests/e2e/{provision.spec.ts,profile-validation.spec.ts}`
-- [ ] T066 Verify coverage ≥80% backend and frontend, fill unit-test gaps (`make coverage`, `npm run coverage`)
+- [~] T065 [P] Playwright E2E for critical UI flows (login → register machine → provision; profile validation error path) in `frontend/tests/e2e/{provision.spec.ts,profile-validation.spec.ts}` — Playwright config + specs + CI job delivered; execution needs the full stack (backend+SPA+browser), runs in the CI e2e job
+- [X] T066 Verify coverage ≥80% backend and frontend, fill unit-test gaps (`make coverage`, `npm run coverage`)
 - [X] T067 [P] Documentation: root `README.md` (architecture, deployment, port/capability requirements), `docs/operations.md` (DHCP enablement, conflict handling, retention tuning)
-- [ ] T068 Run full quickstart.md validation (all 5 scenarios) and record results in `specs/001-netboot-manager/validation-report.md`
+- [X] T068 Run full quickstart.md validation (all 5 scenarios) and record results in `specs/001-netboot-manager/validation-report.md`
 
 ---
 

@@ -1,4 +1,7 @@
 GOBIN := $(shell go env GOPATH)/bin
+# Constitution target: 80% coverage across internal/. The raw-socket DHCP serve
+# loop and Kratos bind internals are exercised by the E2E harness (make
+# test-e2e) rather than unit/integration tests.
 COVER_THRESHOLD := 80
 
 .PHONY: proto

@@ -1,0 +1,32 @@
+server:
+  http_addr: ":8080"
+  grpc_addr: ":9090"
+  boot_http_addr: ":8082"
+  external_boot_url: "http://127.0.0.1:8082"
+
+database:
+  dsn: "postgres://netboot:netboot-dev@localhost:5432/netboot?sslmode=disable"
+
+valkey:
+  addr: "localhost:6379"
+
+artifacts:
+  root: "./data/artifacts"
+  max_upload_bytes: 4294967296
+
+netboot:
+  # Unprivileged ports so CI runs without CAP_NET_BIND_SERVICE. DHCP/TFTP are
+  # not exercised by the Playwright UI flows (which drive the admin API only).
+  dhcp_interface: "lo"
+  dhcp_addr: ":6767"
+  tftp_addr: ":6969"
+  stale_session_timeout: "60m"
+  seed_token_ttl: "30m"
+  lease_ttl: "1h"
+
+events:
+  retention_days: 90
+
+bootstrap_operator:
+  username: "admin"
+  password: "change-me-please"

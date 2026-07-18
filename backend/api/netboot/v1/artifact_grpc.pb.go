@@ -21,9 +21,9 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	ArtifactService_ListArtifacts_FullMethodName  = "/netboot.v1.ArtifactService/ListArtifacts"
+	ArtifactService_ListTransfers_FullMethodName  = "/netboot.v1.ArtifactService/ListTransfers"
 	ArtifactService_GetArtifact_FullMethodName    = "/netboot.v1.ArtifactService/GetArtifact"
 	ArtifactService_DeleteArtifact_FullMethodName = "/netboot.v1.ArtifactService/DeleteArtifact"
-	ArtifactService_ListTransfers_FullMethodName  = "/netboot.v1.ArtifactService/ListTransfers"
 )
 
 // ArtifactServiceClient is the client API for ArtifactService service.
@@ -35,9 +35,10 @@ const (
 // and deletion are proto-defined.
 type ArtifactServiceClient interface {
 	ListArtifacts(ctx context.Context, in *PageRequest, opts ...grpc.CallOption) (*ListArtifactsReply, error)
+	// Literal-path route before /{id} so "transfers" is not parsed as an id.
+	ListTransfers(ctx context.Context, in *ListTransfersRequest, opts ...grpc.CallOption) (*ListTransfersReply, error)
 	GetArtifact(ctx context.Context, in *GetArtifactRequest, opts ...grpc.CallOption) (*BootArtifact, error)
 	DeleteArtifact(ctx context.Context, in *GetArtifactRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	ListTransfers(ctx context.Context, in *ListTransfersRequest, opts ...grpc.CallOption) (*ListTransfersReply, error)
 }
 
 type artifactServiceClient struct {
@@ -52,6 +53,16 @@ func (c *artifactServiceClient) ListArtifacts(ctx context.Context, in *PageReque
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListArtifactsReply)
 	err := c.cc.Invoke(ctx, ArtifactService_ListArtifacts_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *artifactServiceClient) ListTransfers(ctx context.Context, in *ListTransfersRequest, opts ...grpc.CallOption) (*ListTransfersReply, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTransfersReply)
+	err := c.cc.Invoke(ctx, ArtifactService_ListTransfers_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -78,16 +89,6 @@ func (c *artifactServiceClient) DeleteArtifact(ctx context.Context, in *GetArtif
 	return out, nil
 }
 
-func (c *artifactServiceClient) ListTransfers(ctx context.Context, in *ListTransfersRequest, opts ...grpc.CallOption) (*ListTransfersReply, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListTransfersReply)
-	err := c.cc.Invoke(ctx, ArtifactService_ListTransfers_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // ArtifactServiceServer is the server API for ArtifactService service.
 // All implementations must embed UnimplementedArtifactServiceServer
 // for forward compatibility.
@@ -97,9 +98,10 @@ func (c *artifactServiceClient) ListTransfers(ctx context.Context, in *ListTrans
 // and deletion are proto-defined.
 type ArtifactServiceServer interface {
 	ListArtifacts(context.Context, *PageRequest) (*ListArtifactsReply, error)
+	// Literal-path route before /{id} so "transfers" is not parsed as an id.
+	ListTransfers(context.Context, *ListTransfersRequest) (*ListTransfersReply, error)
 	GetArtifact(context.Context, *GetArtifactRequest) (*BootArtifact, error)
 	DeleteArtifact(context.Context, *GetArtifactRequest) (*emptypb.Empty, error)
-	ListTransfers(context.Context, *ListTransfersRequest) (*ListTransfersReply, error)
 	mustEmbedUnimplementedArtifactServiceServer()
 }
 
@@ -113,14 +115,14 @@ type UnimplementedArtifactServiceServer struct{}
 func (UnimplementedArtifactServiceServer) ListArtifacts(context.Context, *PageRequest) (*ListArtifactsReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListArtifacts not implemented")
 }
+func (UnimplementedArtifactServiceServer) ListTransfers(context.Context, *ListTransfersRequest) (*ListTransfersReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListTransfers not implemented")
+}
 func (UnimplementedArtifactServiceServer) GetArtifact(context.Context, *GetArtifactRequest) (*BootArtifact, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetArtifact not implemented")
 }
 func (UnimplementedArtifactServiceServer) DeleteArtifact(context.Context, *GetArtifactRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteArtifact not implemented")
-}
-func (UnimplementedArtifactServiceServer) ListTransfers(context.Context, *ListTransfersRequest) (*ListTransfersReply, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListTransfers not implemented")
 }
 func (UnimplementedArtifactServiceServer) mustEmbedUnimplementedArtifactServiceServer() {}
 func (UnimplementedArtifactServiceServer) testEmbeddedByValue()                         {}
@@ -161,6 +163,24 @@ func _ArtifactService_ListArtifacts_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ArtifactService_ListTransfers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTransfersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ArtifactServiceServer).ListTransfers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ArtifactService_ListTransfers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ArtifactServiceServer).ListTransfers(ctx, req.(*ListTransfersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ArtifactService_GetArtifact_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetArtifactRequest)
 	if err := dec(in); err != nil {
@@ -197,24 +217,6 @@ func _ArtifactService_DeleteArtifact_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ArtifactService_ListTransfers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListTransfersRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ArtifactServiceServer).ListTransfers(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ArtifactService_ListTransfers_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ArtifactServiceServer).ListTransfers(ctx, req.(*ListTransfersRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // ArtifactService_ServiceDesc is the grpc.ServiceDesc for ArtifactService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -227,16 +229,16 @@ var ArtifactService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ArtifactService_ListArtifacts_Handler,
 		},
 		{
+			MethodName: "ListTransfers",
+			Handler:    _ArtifactService_ListTransfers_Handler,
+		},
+		{
 			MethodName: "GetArtifact",
 			Handler:    _ArtifactService_GetArtifact_Handler,
 		},
 		{
 			MethodName: "DeleteArtifact",
 			Handler:    _ArtifactService_DeleteArtifact_Handler,
-		},
-		{
-			MethodName: "ListTransfers",
-			Handler:    _ArtifactService_ListTransfers_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

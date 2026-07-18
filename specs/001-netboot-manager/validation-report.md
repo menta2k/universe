@@ -13,11 +13,18 @@ real TimescaleDB + Valkey containers was executed and passed.
 
 | Suite | Result |
 |-------|--------|
-| Backend unit (`go test ./internal/...`) | PASS |
-| Backend integration (testcontainers: TimescaleDB + Valkey) | PASS (see below) |
+| Backend unit + integration (`make test`, `-race`) | PASS — **80.7% coverage** (gate: 80%) |
 | Frontend unit (Vitest, 83 tests, 12 files) | PASS |
 | Frontend lint (ESLint) + build (vue-tsc + vite) | PASS |
 | Backend E2E (QEMU BIOS+UEFI) | NOT RUN — needs KVM + bridge (scaffold + scripts delivered) |
+
+**Bugs surfaced and fixed during verification** (the test suite earned its keep):
+- SSE handler deadlock — blocked on the Valkey subscribe before flushing
+  response headers, hanging every event-stream client.
+- Route collisions — `/machines/unknown` and `/artifacts/transfers` were
+  shadowed by the `/{id}` routes and returned 500 (parsed the literal as a UUID).
+- `inet`/`macaddr` columns leaked a `/32` suffix into API responses
+  (reservation IP, DHCP subnet ranges, foreign server IDs).
 
 Integration coverage spans: schema/migrations + hypertables, machine API
 contract (CRUD, provision conflicts, DHCP-disabled precondition), full boot

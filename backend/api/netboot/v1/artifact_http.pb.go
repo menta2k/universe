@@ -29,15 +29,16 @@ type ArtifactServiceHTTPServer interface {
 	DeleteArtifact(context.Context, *GetArtifactRequest) (*emptypb.Empty, error)
 	GetArtifact(context.Context, *GetArtifactRequest) (*BootArtifact, error)
 	ListArtifacts(context.Context, *PageRequest) (*ListArtifactsReply, error)
+	// ListTransfers Literal-path route before /{id} so "transfers" is not parsed as an id.
 	ListTransfers(context.Context, *ListTransfersRequest) (*ListTransfersReply, error)
 }
 
 func RegisterArtifactServiceHTTPServer(s *http.Server, srv ArtifactServiceHTTPServer) {
 	r := s.Route("/")
 	r.GET("/api/v1/artifacts", _ArtifactService_ListArtifacts0_HTTP_Handler(srv))
+	r.GET("/api/v1/artifacts/transfers", _ArtifactService_ListTransfers0_HTTP_Handler(srv))
 	r.GET("/api/v1/artifacts/{id}", _ArtifactService_GetArtifact0_HTTP_Handler(srv))
 	r.DELETE("/api/v1/artifacts/{id}", _ArtifactService_DeleteArtifact0_HTTP_Handler(srv))
-	r.GET("/api/v1/artifacts/transfers", _ArtifactService_ListTransfers0_HTTP_Handler(srv))
 }
 
 func _ArtifactService_ListArtifacts0_HTTP_Handler(srv ArtifactServiceHTTPServer) func(ctx http.Context) error {
@@ -55,6 +56,25 @@ func _ArtifactService_ListArtifacts0_HTTP_Handler(srv ArtifactServiceHTTPServer)
 			return err
 		}
 		reply := out.(*ListArtifactsReply)
+		return ctx.Result(200, reply)
+	}
+}
+
+func _ArtifactService_ListTransfers0_HTTP_Handler(srv ArtifactServiceHTTPServer) func(ctx http.Context) error {
+	return func(ctx http.Context) error {
+		var in ListTransfersRequest
+		if err := ctx.BindQuery(&in); err != nil {
+			return err
+		}
+		http.SetOperation(ctx, OperationArtifactServiceListTransfers)
+		h := ctx.Middleware(func(ctx context.Context, req interface{}) (interface{}, error) {
+			return srv.ListTransfers(ctx, req.(*ListTransfersRequest))
+		})
+		out, err := h(ctx, &in)
+		if err != nil {
+			return err
+		}
+		reply := out.(*ListTransfersReply)
 		return ctx.Result(200, reply)
 	}
 }
@@ -103,29 +123,11 @@ func _ArtifactService_DeleteArtifact0_HTTP_Handler(srv ArtifactServiceHTTPServer
 	}
 }
 
-func _ArtifactService_ListTransfers0_HTTP_Handler(srv ArtifactServiceHTTPServer) func(ctx http.Context) error {
-	return func(ctx http.Context) error {
-		var in ListTransfersRequest
-		if err := ctx.BindQuery(&in); err != nil {
-			return err
-		}
-		http.SetOperation(ctx, OperationArtifactServiceListTransfers)
-		h := ctx.Middleware(func(ctx context.Context, req interface{}) (interface{}, error) {
-			return srv.ListTransfers(ctx, req.(*ListTransfersRequest))
-		})
-		out, err := h(ctx, &in)
-		if err != nil {
-			return err
-		}
-		reply := out.(*ListTransfersReply)
-		return ctx.Result(200, reply)
-	}
-}
-
 type ArtifactServiceHTTPClient interface {
 	DeleteArtifact(ctx context.Context, req *GetArtifactRequest, opts ...http.CallOption) (rsp *emptypb.Empty, err error)
 	GetArtifact(ctx context.Context, req *GetArtifactRequest, opts ...http.CallOption) (rsp *BootArtifact, err error)
 	ListArtifacts(ctx context.Context, req *PageRequest, opts ...http.CallOption) (rsp *ListArtifactsReply, err error)
+	// ListTransfers Literal-path route before /{id} so "transfers" is not parsed as an id.
 	ListTransfers(ctx context.Context, req *ListTransfersRequest, opts ...http.CallOption) (rsp *ListTransfersReply, err error)
 }
 
@@ -176,6 +178,7 @@ func (c *ArtifactServiceHTTPClientImpl) ListArtifacts(ctx context.Context, in *P
 	return &out, nil
 }
 
+// ListTransfers Literal-path route before /{id} so "transfers" is not parsed as an id.
 func (c *ArtifactServiceHTTPClientImpl) ListTransfers(ctx context.Context, in *ListTransfersRequest, opts ...http.CallOption) (*ListTransfersReply, error) {
 	var out ListTransfersReply
 	pattern := "/api/v1/artifacts/transfers"

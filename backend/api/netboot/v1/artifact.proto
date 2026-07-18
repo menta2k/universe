@@ -16,14 +16,15 @@ service ArtifactService {
   rpc ListArtifacts(PageRequest) returns (ListArtifactsReply) {
     option (google.api.http) = {get: "/api/v1/artifacts"};
   }
+  // Literal-path route before /{id} so "transfers" is not parsed as an id.
+  rpc ListTransfers(ListTransfersRequest) returns (ListTransfersReply) {
+    option (google.api.http) = {get: "/api/v1/artifacts/transfers"};
+  }
   rpc GetArtifact(GetArtifactRequest) returns (BootArtifact) {
     option (google.api.http) = {get: "/api/v1/artifacts/{id}"};
   }
   rpc DeleteArtifact(GetArtifactRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {delete: "/api/v1/artifacts/{id}"};
-  }
-  rpc ListTransfers(ListTransfersRequest) returns (ListTransfersReply) {
-    option (google.api.http) = {get: "/api/v1/artifacts/transfers"};
   }
 }
 

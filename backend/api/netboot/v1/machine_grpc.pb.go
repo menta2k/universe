@@ -21,13 +21,13 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	MachineService_ListMachines_FullMethodName        = "/netboot.v1.MachineService/ListMachines"
+	MachineService_ListUnknownBoots_FullMethodName    = "/netboot.v1.MachineService/ListUnknownBoots"
 	MachineService_GetMachine_FullMethodName          = "/netboot.v1.MachineService/GetMachine"
 	MachineService_CreateMachine_FullMethodName       = "/netboot.v1.MachineService/CreateMachine"
 	MachineService_UpdateMachine_FullMethodName       = "/netboot.v1.MachineService/UpdateMachine"
 	MachineService_DeleteMachine_FullMethodName       = "/netboot.v1.MachineService/DeleteMachine"
 	MachineService_Provision_FullMethodName           = "/netboot.v1.MachineService/Provision"
 	MachineService_CancelProvision_FullMethodName     = "/netboot.v1.MachineService/CancelProvision"
-	MachineService_ListUnknownBoots_FullMethodName    = "/netboot.v1.MachineService/ListUnknownBoots"
 	MachineService_RegisterFromUnknown_FullMethodName = "/netboot.v1.MachineService/RegisterFromUnknown"
 )
 
@@ -36,13 +36,15 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type MachineServiceClient interface {
 	ListMachines(ctx context.Context, in *ListMachinesRequest, opts ...grpc.CallOption) (*ListMachinesReply, error)
+	// Literal-path routes MUST be declared before the /{id} route so the router
+	// matches them first (otherwise "unknown" is parsed as an id).
+	ListUnknownBoots(ctx context.Context, in *PageRequest, opts ...grpc.CallOption) (*ListUnknownBootsReply, error)
 	GetMachine(ctx context.Context, in *GetMachineRequest, opts ...grpc.CallOption) (*Machine, error)
 	CreateMachine(ctx context.Context, in *CreateMachineRequest, opts ...grpc.CallOption) (*Machine, error)
 	UpdateMachine(ctx context.Context, in *UpdateMachineRequest, opts ...grpc.CallOption) (*Machine, error)
 	DeleteMachine(ctx context.Context, in *GetMachineRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	Provision(ctx context.Context, in *GetMachineRequest, opts ...grpc.CallOption) (*Machine, error)
 	CancelProvision(ctx context.Context, in *GetMachineRequest, opts ...grpc.CallOption) (*Machine, error)
-	ListUnknownBoots(ctx context.Context, in *PageRequest, opts ...grpc.CallOption) (*ListUnknownBootsReply, error)
 	RegisterFromUnknown(ctx context.Context, in *RegisterFromUnknownRequest, opts ...grpc.CallOption) (*Machine, error)
 }
 
@@ -58,6 +60,16 @@ func (c *machineServiceClient) ListMachines(ctx context.Context, in *ListMachine
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListMachinesReply)
 	err := c.cc.Invoke(ctx, MachineService_ListMachines_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *machineServiceClient) ListUnknownBoots(ctx context.Context, in *PageRequest, opts ...grpc.CallOption) (*ListUnknownBootsReply, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListUnknownBootsReply)
+	err := c.cc.Invoke(ctx, MachineService_ListUnknownBoots_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -124,16 +136,6 @@ func (c *machineServiceClient) CancelProvision(ctx context.Context, in *GetMachi
 	return out, nil
 }
 
-func (c *machineServiceClient) ListUnknownBoots(ctx context.Context, in *PageRequest, opts ...grpc.CallOption) (*ListUnknownBootsReply, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListUnknownBootsReply)
-	err := c.cc.Invoke(ctx, MachineService_ListUnknownBoots_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *machineServiceClient) RegisterFromUnknown(ctx context.Context, in *RegisterFromUnknownRequest, opts ...grpc.CallOption) (*Machine, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Machine)
@@ -149,13 +151,15 @@ func (c *machineServiceClient) RegisterFromUnknown(ctx context.Context, in *Regi
 // for forward compatibility.
 type MachineServiceServer interface {
 	ListMachines(context.Context, *ListMachinesRequest) (*ListMachinesReply, error)
+	// Literal-path routes MUST be declared before the /{id} route so the router
+	// matches them first (otherwise "unknown" is parsed as an id).
+	ListUnknownBoots(context.Context, *PageRequest) (*ListUnknownBootsReply, error)
 	GetMachine(context.Context, *GetMachineRequest) (*Machine, error)
 	CreateMachine(context.Context, *CreateMachineRequest) (*Machine, error)
 	UpdateMachine(context.Context, *UpdateMachineRequest) (*Machine, error)
 	DeleteMachine(context.Context, *GetMachineRequest) (*emptypb.Empty, error)
 	Provision(context.Context, *GetMachineRequest) (*Machine, error)
 	CancelProvision(context.Context, *GetMachineRequest) (*Machine, error)
-	ListUnknownBoots(context.Context, *PageRequest) (*ListUnknownBootsReply, error)
 	RegisterFromUnknown(context.Context, *RegisterFromUnknownRequest) (*Machine, error)
 	mustEmbedUnimplementedMachineServiceServer()
 }
@@ -169,6 +173,9 @@ type UnimplementedMachineServiceServer struct{}
 
 func (UnimplementedMachineServiceServer) ListMachines(context.Context, *ListMachinesRequest) (*ListMachinesReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListMachines not implemented")
+}
+func (UnimplementedMachineServiceServer) ListUnknownBoots(context.Context, *PageRequest) (*ListUnknownBootsReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListUnknownBoots not implemented")
 }
 func (UnimplementedMachineServiceServer) GetMachine(context.Context, *GetMachineRequest) (*Machine, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMachine not implemented")
@@ -187,9 +194,6 @@ func (UnimplementedMachineServiceServer) Provision(context.Context, *GetMachineR
 }
 func (UnimplementedMachineServiceServer) CancelProvision(context.Context, *GetMachineRequest) (*Machine, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CancelProvision not implemented")
-}
-func (UnimplementedMachineServiceServer) ListUnknownBoots(context.Context, *PageRequest) (*ListUnknownBootsReply, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListUnknownBoots not implemented")
 }
 func (UnimplementedMachineServiceServer) RegisterFromUnknown(context.Context, *RegisterFromUnknownRequest) (*Machine, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterFromUnknown not implemented")
@@ -229,6 +233,24 @@ func _MachineService_ListMachines_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MachineServiceServer).ListMachines(ctx, req.(*ListMachinesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MachineService_ListUnknownBoots_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MachineServiceServer).ListUnknownBoots(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MachineService_ListUnknownBoots_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MachineServiceServer).ListUnknownBoots(ctx, req.(*PageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -341,24 +363,6 @@ func _MachineService_CancelProvision_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MachineService_ListUnknownBoots_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PageRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MachineServiceServer).ListUnknownBoots(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: MachineService_ListUnknownBoots_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MachineServiceServer).ListUnknownBoots(ctx, req.(*PageRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _MachineService_RegisterFromUnknown_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RegisterFromUnknownRequest)
 	if err := dec(in); err != nil {
@@ -389,6 +393,10 @@ var MachineService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MachineService_ListMachines_Handler,
 		},
 		{
+			MethodName: "ListUnknownBoots",
+			Handler:    _MachineService_ListUnknownBoots_Handler,
+		},
+		{
 			MethodName: "GetMachine",
 			Handler:    _MachineService_GetMachine_Handler,
 		},
@@ -411,10 +419,6 @@ var MachineService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelProvision",
 			Handler:    _MachineService_CancelProvision_Handler,
-		},
-		{
-			MethodName: "ListUnknownBoots",
-			Handler:    _MachineService_ListUnknownBoots_Handler,
 		},
 		{
 			MethodName: "RegisterFromUnknown",

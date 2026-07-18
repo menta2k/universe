@@ -13,6 +13,11 @@ service MachineService {
   rpc ListMachines(ListMachinesRequest) returns (ListMachinesReply) {
     option (google.api.http) = {get: "/api/v1/machines"};
   }
+  // Literal-path routes MUST be declared before the /{id} route so the router
+  // matches them first (otherwise "unknown" is parsed as an id).
+  rpc ListUnknownBoots(PageRequest) returns (ListUnknownBootsReply) {
+    option (google.api.http) = {get: "/api/v1/machines/unknown"};
+  }
   rpc GetMachine(GetMachineRequest) returns (Machine) {
     option (google.api.http) = {get: "/api/v1/machines/{id}"};
   }
@@ -42,9 +47,6 @@ service MachineService {
       post: "/api/v1/machines/{id}/cancel"
       body: "*"
     };
-  }
-  rpc ListUnknownBoots(PageRequest) returns (ListUnknownBootsReply) {
-    option (google.api.http) = {get: "/api/v1/machines/unknown"};
   }
   rpc RegisterFromUnknown(RegisterFromUnknownRequest) returns (Machine) {
     option (google.api.http) = {

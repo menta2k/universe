@@ -45,15 +45,26 @@ func startFullServer(t *testing.T, env *testenv.Env) string {
 	machines := biz.NewMachineUsecase(machineRepo, sessionRepo, profileRepo,
 		data.NewDhcpGate(env.Data), events, log)
 	profiles := biz.NewProfileUsecase(profileRepo, autoinstallValidator{}, log)
+	dhcpRepo := data.NewDhcpConfigRepo(env.Data)
+	dhcpUC := biz.NewDhcpConfigUsecase(dhcpRepo, data.NewLeaseRepo(env.Data), dhcpRepo, nil, log)
+	sessionsUC := biz.NewSessionQueryUsecase(data.NewSessionQueryRepo(env.Data))
+	artifactsUC := biz.NewArtifactUsecase(mustArtifactStore(t, env), data.NewTransferRepo(env.Data), log)
 
 	authSvc := service.NewAuthService(operators)
 	machineSvc := service.NewMachineService(machines)
 	profileSvc := service.NewProfileService(profiles, machines)
+	dhcpSvc := service.NewDhcpService(dhcpUC)
+	sessionSvc := service.NewSessionService(sessionsUC)
+	artifactSvc := service.NewArtifactService(artifactsUC, 1<<30)
 
 	srv := server.NewHTTPServer(cfg, log, server.NewMetrics(), operators, events,
 		func(s *khttp.Server) { v1.RegisterAuthServiceHTTPServer(s, authSvc) },
 		func(s *khttp.Server) { v1.RegisterMachineServiceHTTPServer(s, machineSvc) },
 		func(s *khttp.Server) { v1.RegisterProfileServiceHTTPServer(s, profileSvc) },
+		func(s *khttp.Server) { v1.RegisterDhcpServiceHTTPServer(s, dhcpSvc) },
+		func(s *khttp.Server) { v1.RegisterSessionServiceHTTPServer(s, sessionSvc) },
+		func(s *khttp.Server) { v1.RegisterArtifactServiceHTTPServer(s, artifactSvc) },
+		func(s *khttp.Server) { artifactSvc.RegisterMultipart(s) },
 	)
 	go func() { _ = srv.Start(context.Background()) }()
 	t.Cleanup(func() { _ = srv.Stop(context.Background()) })
@@ -79,6 +90,15 @@ func startFullServer(t *testing.T, env *testenv.Env) string {
 type autoinstallValidator struct{}
 
 func (autoinstallValidator) Validate(*biz.Profile) error { return nil }
+
+func mustArtifactStore(t *testing.T, env *testenv.Env) *data.ArtifactStore {
+	t.Helper()
+	store, err := data.NewArtifactStore(env.Data, t.TempDir(), 1<<30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store
+}
 
 func TestFullServerHTTPFlow(t *testing.T) {
 	env := testenv.Start(t)
@@ -122,6 +142,28 @@ func TestFullServerHTTPFlow(t *testing.T) {
 		t.Fatalf("invalid create: code=%d body=%s", code, body)
 	}
 
+	// Exercise the remaining read services + DHCP config lifecycle.
+	for _, path := range []string{
+		"/api/v1/profiles", "/api/v1/sessions", "/api/v1/artifacts",
+		"/api/v1/artifacts/transfers", "/api/v1/dhcp/config", "/api/v1/dhcp/leases",
+		"/api/v1/dhcp/conflicts", "/api/v1/machines/unknown",
+	} {
+		if code, body, _ := doJSON(t, jar, "GET", base+path, ""); code != 200 {
+			t.Errorf("GET %s: code=%d body=%s", path, code, body)
+		}
+	}
+	// DHCP update (valid) + enable + disable.
+	if code, body, _ := doJSON(t, jar, "PUT", base+"/api/v1/dhcp/config",
+		`{"lease_ttl_seconds":3600,"subnets":[{"network":"192.168.90.0/24","range_start":"192.168.90.100","range_end":"192.168.90.200","gateway":"192.168.90.1"}]}`); code != 200 {
+		t.Errorf("dhcp update: code=%d body=%s", code, body)
+	}
+	if code, _, _ := doJSON(t, jar, "POST", base+"/api/v1/dhcp/enable", "{}"); code != 200 {
+		t.Errorf("dhcp enable: code=%d", code)
+	}
+	if code, _, _ := doJSON(t, jar, "POST", base+"/api/v1/dhcp/disable", "{}"); code != 200 {
+		t.Errorf("dhcp disable: code=%d", code)
+	}
+
 	// Logout clears the session.
 	if code, _, hdr := doJSON(t, jar, "POST", base+"/api/v1/auth/logout", "{}"); code != 200 {
 		t.Fatalf("logout: code=%d", code)
@@ -136,6 +178,7 @@ func TestFullServerHTTPFlow(t *testing.T) {
 	if code, _, _ := doJSON(t, jar, "GET", base+"/healthz", ""); code != 200 {
 		t.Errorf("healthz code=%d", code)
 	}
+	// Metrics + health checked below (before re-login for the provision flow).
 	if code, body, _ := doJSON(t, jar, "GET", base+"/metrics", ""); code != 200 || !strings.Contains(body, "netboot_") {
 		t.Errorf("metrics code=%d", code)
 	}

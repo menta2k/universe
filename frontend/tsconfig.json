@@ -26,5 +26,8 @@
     "vite.config.ts",
     "vitest.config.ts",
     "eslint.config.js"
+  ],
+  "exclude": [
+    "tests/e2e/**"
   ]
 }
