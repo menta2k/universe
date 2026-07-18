@@ -103,15 +103,15 @@ flows via UI; invalid profile never reaches a booting machine.
 
 ### Tests for User Story 2 (write FIRST, must FAIL) ⚠️
 
-- [ ] T039 [P] [US2] Unit tests for profile validation rules (storage modes, netplan shape, ≥1 SSH key, template render check on save, version bump + revision row) in `backend/internal/biz/profile_full_test.go`
-- [ ] T040 [P] [US2] API contract tests for ProfileService (422 field errors, 409 delete-while-assigned, clone, preview redacts credentials) in `backend/tests/integration/profile_api_test.go`
+- [X] T039 [P] [US2] Unit tests for profile validation rules (storage modes, netplan shape, ≥1 SSH key, template render check on save, version bump + revision row) in `backend/internal/biz/profile_full_test.go`
+- [X] T040 [P] [US2] API contract tests for ProfileService (422 field errors, 409 delete-while-assigned, clone, preview redacts credentials) in `backend/tests/integration/profile_api_test.go`
 
 ### Implementation for User Story 2
 
-- [ ] T041 [US2] Extend profile usecase to full lifecycle in `backend/internal/biz/profile.go`: update-with-version-bump + revision write, clone, delete guard (FK RESTRICT → typed CONFLICT), save-time render validation via autoinstall renderer
-- [ ] T042 [US2] Profile revisions repo + queries in `backend/internal/data/profile_repo.go`
-- [ ] T043 [US2] ProfileService (Kratos) in `backend/internal/service/profile_service.go`: List/Get/Create/Update/Clone/Delete/Preview per contracts/admin-api.md
-- [ ] T044 [US2] Frontend Profiles page in `frontend/src/pages/ProfilesPage.vue` + editor `frontend/src/components/ProfileEditor.vue` (release, storage layout, network, packages, SSH keys, late-commands) + `frontend/src/stores/profiles.ts`; preview drawer rendering user-data; field-error display from 422; component test `frontend/tests/unit/profiles.spec.ts`
+- [X] T041 [US2] Extend profile usecase to full lifecycle in `backend/internal/biz/profile.go`: update-with-version-bump + revision write, clone, delete guard (FK RESTRICT → typed CONFLICT), save-time render validation via autoinstall renderer
+- [X] T042 [US2] Profile revisions repo + queries in `backend/internal/data/profile_repo.go`
+- [X] T043 [US2] ProfileService (Kratos) in `backend/internal/service/profile_service.go`: List/Get/Create/Update/Clone/Delete/Preview per contracts/admin-api.md
+- [X] T044 [US2] Frontend Profiles page in `frontend/src/pages/ProfilesPage.vue` + editor `frontend/src/components/ProfileEditor.vue` (release, storage layout, network, packages, SSH keys, late-commands) + `frontend/src/stores/profiles.ts`; preview drawer rendering user-data; field-error display from 422; component test `frontend/tests/unit/profiles.spec.ts`
 
 **Checkpoint**: US1 + US2 work; operators manage the fleet with real profiles
 
@@ -128,15 +128,15 @@ UI, boot a client, reserved IP honored and lease visible within seconds.
 
 ### Tests for User Story 3 (write FIRST, must FAIL) ⚠️
 
-- [ ] T045 [P] [US3] Unit tests for DHCP config validation (range within subnet, no overlaps, reservation containment/uniqueness, TTL bounds) and last-valid-config swap in `backend/internal/biz/dhcpconfig_test.go`
-- [ ] T046 [P] [US3] API contract tests for DhcpService (update 422 keeps old version, enable/disable events, leases from Valkey, conflicts list) in `backend/tests/integration/dhcp_api_test.go`
+- [X] T045 [P] [US3] Unit tests for DHCP config validation (range within subnet, no overlaps, reservation containment/uniqueness, TTL bounds) and last-valid-config swap in `backend/internal/biz/dhcpconfig_test.go`
+- [X] T046 [P] [US3] API contract tests for DhcpService (update 422 keeps old version, enable/disable events, leases from Valkey, conflicts list) in `backend/tests/integration/dhcp_api_test.go`
 
 ### Implementation for User Story 3
 
-- [ ] T047 [US3] DHCP config usecase in `backend/internal/biz/dhcpconfig.go` (versioned transactional apply, hot-reload signal to running server, enable/disable) + repo in `backend/internal/data/dhcpconfig_repo.go`
-- [ ] T048 [US3] Foreign-DHCP conflict watcher in `backend/internal/netboot/dhcp/conflict.go`: passively log OFFERs with foreign server-id → dhcp_offers_seen + `foreign_dhcp_detected` events; unit test in same package
-- [ ] T049 [US3] DhcpService (Kratos) in `backend/internal/service/dhcp_service.go`: Get/UpdateConfig, Enable/Disable, ListLeases (Valkey scan), reservation CRUD, ListForeignServers
-- [ ] T050 [US3] Frontend DHCP page in `frontend/src/pages/DhcpPage.vue` + `frontend/src/stores/dhcp.ts`: enable toggle with confirmation, subnet/range editor, reservations table (linked to machines), live leases table (poll/SSE), conflicts banner; component test `frontend/tests/unit/dhcp.spec.ts`
+- [X] T047 [US3] DHCP config usecase in `backend/internal/biz/dhcpconfig.go` (versioned transactional apply, hot-reload signal to running server, enable/disable) + repo in `backend/internal/data/dhcpconfig_repo.go`
+- [X] T048 [US3] Foreign-DHCP conflict watcher in `backend/internal/netboot/dhcp/conflict.go`: passively log OFFERs with foreign server-id → dhcp_offers_seen + `foreign_dhcp_detected` events; unit test in same package
+- [X] T049 [US3] DhcpService (Kratos) in `backend/internal/service/dhcp_service.go`: Get/UpdateConfig, Enable/Disable, ListLeases (Valkey scan), reservation CRUD, ListForeignServers
+- [X] T050 [US3] Frontend DHCP page in `frontend/src/pages/DhcpPage.vue` + `frontend/src/stores/dhcp.ts`: enable toggle with confirmation, subnet/range editor, reservations table (linked to machines), live leases table (poll/SSE), conflicts banner; component test `frontend/tests/unit/dhcp.spec.ts`
 
 **Checkpoint**: Day-2 DHCP operation fully in the UI
 
@@ -152,14 +152,14 @@ in activity view after a client boots (US4 acceptance scenarios).
 
 ### Tests for User Story 4 (write FIRST, must FAIL) ⚠️
 
-- [ ] T051 [P] [US4] Unit tests for artifact validation (size limit, filename charset/no traversal, kind/release rules, sha256 computed) and delete-guard-while-referenced in `backend/internal/biz/artifact_full_test.go`
-- [ ] T052 [P] [US4] API contract tests for ArtifactService (multipart upload, replace, 409 delete-referenced, transfers listing) in `backend/tests/integration/artifact_api_test.go`
+- [X] T051 [P] [US4] Unit tests for artifact validation (size limit, filename charset/no traversal, kind/release rules, sha256 computed) and delete-guard-while-referenced in `backend/internal/biz/artifact_full_test.go`
+- [X] T052 [P] [US4] API contract tests for ArtifactService (multipart upload, replace, 409 delete-referenced, transfers listing) in `backend/tests/integration/artifact_api_test.go`
 
 ### Implementation for User Story 4
 
-- [ ] T053 [US4] Extend artifact usecase to full lifecycle (upload/replace/delete guards, release-set linkage to profiles) in `backend/internal/biz/artifact.go`
-- [ ] T054 [US4] ArtifactService (Kratos) with multipart upload handling in `backend/internal/service/artifact_service.go`; transfers query (tftp_transfers + file_served events) in `backend/internal/data/transfer_repo.go`
-- [ ] T055 [US4] Frontend Boot Files page in `frontend/src/pages/BootFilesPage.vue` + `frontend/src/stores/artifacts.ts`: upload dialog with progress, sha256 display, release grouping, transfer activity table; component test `frontend/tests/unit/bootfiles.spec.ts`
+- [X] T053 [US4] Extend artifact usecase to full lifecycle (upload/replace/delete guards, release-set linkage to profiles) in `backend/internal/biz/artifact.go`
+- [X] T054 [US4] ArtifactService (Kratos) with multipart upload handling in `backend/internal/service/artifact_service.go`; transfers query (tftp_transfers + file_served events) in `backend/internal/data/transfer_repo.go`
+- [X] T055 [US4] Frontend Boot Files page in `frontend/src/pages/BootFilesPage.vue` + `frontend/src/stores/artifacts.ts`: upload dialog with progress, sha256 display, release grouping, transfer activity table; component test `frontend/tests/unit/bootfiles.spec.ts`
 
 **Checkpoint**: No filesystem access needed to onboard a new Ubuntu release
 
@@ -175,16 +175,16 @@ becomes `stale/failed` with last completed phase and evidence, diagnosable from 
 
 ### Tests for User Story 5 (write FIRST, must FAIL) ⚠️
 
-- [ ] T056 [P] [US5] Unit tests for stale-session sweeper (timeout → stale, evidence snapshot, machine → failed) in `backend/internal/biz/session_sweeper_test.go`
-- [ ] T057 [P] [US5] Integration test: SSE stream delivers published events filtered by machine/session within 5s (SC-004) in `backend/tests/integration/sse_test.go`
-- [ ] T058 [P] [US5] API contract tests for SessionService (list filters, timeline ordering, evidence payload) in `backend/tests/integration/session_api_test.go`
+- [X] T056 [P] [US5] Unit tests for stale-session sweeper (timeout → stale, evidence snapshot, machine → failed) in `backend/internal/biz/session_sweeper_test.go`
+- [X] T057 [P] [US5] Integration test: SSE stream delivers published events filtered by machine/session within 5s (SC-004) in `backend/tests/integration/sse_test.go`
+- [X] T058 [P] [US5] API contract tests for SessionService (list filters, timeline ordering, evidence payload) in `backend/tests/integration/session_api_test.go`
 
 ### Implementation for User Story 5
 
-- [ ] T059 [US5] Stale-session sweeper (ticker, configurable timeout) in `backend/internal/biz/session_sweeper.go` wired into cmd lifecycle
-- [ ] T060 [US5] SessionService (Kratos) in `backend/internal/service/session_service.go`: ListSessions/GetSession (timeline from provisioning_events) per contracts/admin-api.md
-- [ ] T061 [US5] SSE endpoint `/api/v1/events/stream` backed by Valkey pub/sub with filter params in `backend/internal/server/sse.go`
-- [ ] T062 [US5] Frontend Sessions page + machine timeline: `frontend/src/pages/SessionsPage.vue`, `frontend/src/components/SessionTimeline.vue` (live phase stepper via SSE client `frontend/src/plugins/sse.ts`), evidence viewer; dashboard summary cards in `frontend/src/pages/DashboardPage.vue`; component test `frontend/tests/unit/sessions.spec.ts`
+- [X] T059 [US5] Stale-session sweeper (ticker, configurable timeout) in `backend/internal/biz/session_sweeper.go` wired into cmd lifecycle
+- [X] T060 [US5] SessionService (Kratos) in `backend/internal/service/session_service.go`: ListSessions/GetSession (timeline from provisioning_events) per contracts/admin-api.md
+- [X] T061 [US5] SSE endpoint `/api/v1/events/stream` backed by Valkey pub/sub with filter params in `backend/internal/server/sse.go`
+- [X] T062 [US5] Frontend Sessions page + machine timeline: `frontend/src/pages/SessionsPage.vue`, `frontend/src/components/SessionTimeline.vue` (live phase stepper via SSE client `frontend/src/plugins/sse.ts`), evidence viewer; dashboard summary cards in `frontend/src/pages/DashboardPage.vue`; component test `frontend/tests/unit/sessions.spec.ts`
 
 **Checkpoint**: All five user stories independently functional
 

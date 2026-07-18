@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	kgrpc "github.com/go-kratos/kratos/v2/transport/grpc"
@@ -14,7 +15,9 @@ import (
 	"universe/backend/internal/biz"
 	"universe/backend/internal/conf"
 	"universe/backend/internal/data"
+	"universe/backend/internal/netboot/autoinstall"
 	"universe/backend/internal/netboot/bootsrv"
+	"universe/backend/internal/netboot/dhcp"
 	"universe/backend/internal/netboot/tftp"
 	"universe/backend/internal/server"
 	"universe/backend/internal/service"
@@ -27,10 +30,14 @@ type app struct {
 	cfg *conf.Config
 	log *slog.Logger
 
-	httpSrv *khttp.Server
-	grpcSrv *kgrpc.Server
-	tftpSrv *tftp.Server
-	bootSrv *bootsrv.Server
+	httpSrv    *khttp.Server
+	grpcSrv    *kgrpc.Server
+	tftpSrv    *tftp.Server
+	bootSrv    *bootsrv.Server
+	dhcpCtl    *dhcp.Controller
+	sweeper    *biz.SessionSweeper
+	streamer   *server.EventStreamer
+	dhcpConfig *biz.DhcpConfigUsecase
 }
 
 func newApp(ctx context.Context, cfg *conf.Config) (*app, func(), error) {
@@ -52,6 +59,7 @@ func newApp(ctx context.Context, cfg *conf.Config) (*app, func(), error) {
 	machines := biz.NewMachineUsecase(machineRepo, sessionRepo, profileRepo,
 		data.NewDhcpGate(d), events, log)
 	sessions := biz.NewSessionUsecase(sessionRepo, machineRepo, events, log)
+	profiles := biz.NewProfileUsecase(profileRepo, autoinstall.NewValidator(), log)
 	bootFacade := biz.NewBootFacade(machines, sessions)
 
 	artifactStore, err := data.NewArtifactStore(d, cfg.Artifacts.Root, cfg.Artifacts.MaxUploadBytes)
@@ -59,6 +67,22 @@ func newApp(ctx context.Context, cfg *conf.Config) (*app, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
+	artifacts := biz.NewArtifactUsecase(artifactStore, data.NewTransferRepo(d), log)
+	sessionQuery := biz.NewSessionQueryUsecase(data.NewSessionQueryRepo(d))
+	sweeper := biz.NewSessionSweeper(sessionRepo, machineRepo,
+		events, cfg.Netboot.StaleSessionTimeout.Duration(), log)
+
+	// DHCP runtime controller (reacts to enable/disable + config changes; FR-016).
+	dhcpConflict := dhcp.NewConflictWatcher(hostIP(cfg.Server.ExternalBootURL),
+		data.NewForeignOfferSink(d), log)
+	dhcpCtl := dhcp.NewController(dhcp.Config{
+		Interface:   cfg.Netboot.DHCPInterface,
+		ServerIP:    hostIP(cfg.Server.ExternalBootURL),
+		BootHTTPURL: cfg.Server.ExternalBootURL,
+		Addr:        cfg.Netboot.DHCPAddr,
+	}, d.Valkey, machines, events, dhcpConflict, log)
+	dhcpRepo := data.NewDhcpConfigRepo(d)
+	dhcpConfig := biz.NewDhcpConfigUsecase(dhcpRepo, data.NewLeaseRepo(d), dhcpRepo, dhcpCtl, log)
 
 	if err := operators.EnsureBootstrap(ctx,
 		cfg.BootstrapOperator.Username, cfg.BootstrapOperator.Password); err != nil {
@@ -69,14 +93,29 @@ func newApp(ctx context.Context, cfg *conf.Config) (*app, func(), error) {
 	// service layer
 	authSvc := service.NewAuthService(operators)
 	machineSvc := service.NewMachineService(machines)
+	profileSvc := service.NewProfileService(profiles, machines)
+	artifactSvc := service.NewArtifactService(artifacts, cfg.Artifacts.MaxUploadBytes)
+	dhcpSvc := service.NewDhcpService(dhcpConfig)
+	sessionSvc := service.NewSessionService(sessionQuery)
+	streamer := server.NewEventStreamer(d.Valkey, data.EventsChannel, log)
 
 	httpSrv := server.NewHTTPServer(cfg, log, metrics, operators, events,
 		func(s *khttp.Server) { v1.RegisterAuthServiceHTTPServer(s, authSvc) },
 		func(s *khttp.Server) { v1.RegisterMachineServiceHTTPServer(s, machineSvc) },
+		func(s *khttp.Server) { v1.RegisterProfileServiceHTTPServer(s, profileSvc) },
+		func(s *khttp.Server) { v1.RegisterArtifactServiceHTTPServer(s, artifactSvc) },
+		func(s *khttp.Server) { artifactSvc.RegisterMultipart(s) },
+		func(s *khttp.Server) { v1.RegisterDhcpServiceHTTPServer(s, dhcpSvc) },
+		func(s *khttp.Server) { v1.RegisterSessionServiceHTTPServer(s, sessionSvc) },
+		func(s *khttp.Server) { s.HandleFunc("/api/v1/events/stream", streamer.ServeHTTP) },
 	)
 	grpcSrv := server.NewGRPCServer(cfg, log, operators, events,
 		func(s *kgrpc.Server) { v1.RegisterAuthServiceServer(s, authSvc) },
 		func(s *kgrpc.Server) { v1.RegisterMachineServiceServer(s, machineSvc) },
+		func(s *kgrpc.Server) { v1.RegisterProfileServiceServer(s, profileSvc) },
+		func(s *kgrpc.Server) { v1.RegisterArtifactServiceServer(s, artifactSvc) },
+		func(s *kgrpc.Server) { v1.RegisterDhcpServiceServer(s, dhcpSvc) },
+		func(s *kgrpc.Server) { v1.RegisterSessionServiceServer(s, sessionSvc) },
 	)
 
 	// machine-facing servers
@@ -88,7 +127,17 @@ func newApp(ctx context.Context, cfg *conf.Config) (*app, func(), error) {
 	return &app{
 		cfg: cfg, log: log,
 		httpSrv: httpSrv, grpcSrv: grpcSrv, tftpSrv: tftpSrv, bootSrv: bootSrv,
+		dhcpCtl: dhcpCtl, sweeper: sweeper, streamer: streamer, dhcpConfig: dhcpConfig,
 	}, cleanup, nil
+}
+
+// hostIP extracts the host from an external URL like "http://192.168.90.1:8082".
+func hostIP(externalURL string) string {
+	s := strings.TrimPrefix(strings.TrimPrefix(externalURL, "http://"), "https://")
+	if i := strings.IndexAny(s, ":/"); i >= 0 {
+		return s[:i]
+	}
+	return s
 }
 
 // start launches every enabled service under the errgroup with graceful stop.
@@ -122,6 +171,23 @@ func (a *app) start(ctx context.Context, g *errgroup.Group) {
 		stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		return a.bootSrv.Shutdown(stopCtx)
+	})
+
+	// DHCP: reconcile the runtime server with the persisted config at startup
+	// (starts only if an operator previously enabled it; FR-016).
+	g.Go(func() error {
+		if cfg, err := a.dhcpConfig.Get(ctx); err != nil {
+			a.log.Error("load dhcp config at startup", "err", err)
+		} else {
+			a.dhcpCtl.Reload(cfg)
+		}
+		<-ctx.Done()
+		return a.dhcpCtl.Stop(context.Background())
+	})
+
+	// Stale-session sweeper (FR-015).
+	g.Go(func() error {
+		return a.sweeper.Run(ctx)
 	})
 }
 

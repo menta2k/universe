@@ -56,6 +56,8 @@ export interface Profile {
   readonly kernel_cmdline_extra: string
   readonly created_at: string
   readonly updated_at: string
+  /** Number of machines currently referencing this profile (blocks delete when > 0). */
+  readonly assigned_machines: number
 }
 
 export interface DhcpSubnet {
@@ -110,13 +112,14 @@ export type SessionState = 'active' | 'completed' | 'failed' | 'stale'
 export interface ProvisioningSession {
   readonly id: string
   readonly machine_id: string
+  readonly machine_name: string
+  readonly machine_mac: string
   readonly profile_id: string
   readonly profile_version: number
   readonly state: SessionState
   readonly started_at: string
   readonly ended_at: string | null
   readonly failure_phase: string | null
-  readonly evidence: Record<string, unknown>
 }
 
 export type EventPhase =

@@ -177,7 +177,8 @@ func (f *fakeSessionRepo) ListActiveOlderThan(_ context.Context, cutoff time.Tim
 }
 
 type fakeProfileRepo struct {
-	byID map[string]*Profile
+	byID      map[string]*Profile
+	deleteErr error
 }
 
 func newFakeProfileRepo() *fakeProfileRepo {
@@ -203,8 +204,31 @@ func (f *fakeProfileRepo) List(_ context.Context, _, _ int) ([]*Profile, int64, 
 func (f *fakeProfileRepo) Create(_ context.Context, p *Profile) (*Profile, error) {
 	cp := *p
 	cp.ID = "p-" + p.Name
+	if cp.Version == 0 {
+		cp.Version = 1
+	}
 	f.byID[cp.ID] = &cp
 	return &cp, nil
+}
+
+func (f *fakeProfileRepo) Update(_ context.Context, p *Profile) (*Profile, error) {
+	if _, ok := f.byID[p.ID]; !ok {
+		return nil, ErrEntityNotFound
+	}
+	cp := *p
+	f.byID[cp.ID] = &cp
+	return &cp, nil
+}
+
+func (f *fakeProfileRepo) Delete(_ context.Context, id string) error {
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
+	if _, ok := f.byID[id]; !ok {
+		return ErrEntityNotFound
+	}
+	delete(f.byID, id)
+	return nil
 }
 
 type fakeGate struct{ enabled bool }

@@ -136,6 +136,45 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   return envelope.data as T
 }
 
+export interface MultipartOptions {
+  readonly method?: 'POST' | 'PUT'
+  readonly skipAuthRedirect?: boolean
+}
+
+/**
+ * Perform a raw multipart/form-data upload. The browser sets the multipart
+ * boundary automatically, so `Content-Type` is intentionally left unset.
+ * The response envelope is unwrapped exactly like JSON requests, so 422 field
+ * details surface as `ApiError.details`.
+ */
+export async function requestMultipart<T>(
+  path: string,
+  form: FormData,
+  options: MultipartOptions = {},
+): Promise<T> {
+  let response: Response
+  try {
+    response = await fetch(path, {
+      method: options.method ?? 'POST',
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+      body: form,
+    })
+  } catch {
+    throw new ApiError('Network error: could not reach the server', 0)
+  }
+
+  if (response.status === 401 && !options.skipAuthRedirect) {
+    unauthorizedHandler()
+  }
+
+  const envelope = await parseEnvelope(response)
+  if (!response.ok || !envelope.success) {
+    throw toApiError(envelope.error, response.status)
+  }
+  return envelope.data as T
+}
+
 /** Perform a request and return both `data` and pagination `meta`. */
 export async function requestWithMeta<T>(
   path: string,

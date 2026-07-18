@@ -93,18 +93,24 @@ type DhcpGate interface {
 	Enabled(ctx context.Context) (bool, error)
 }
 
+// ProfileLookup is the read-only slice of ProfileRepo the machine usecase
+// needs (accept a small interface).
+type ProfileLookup interface {
+	GetByID(ctx context.Context, id string) (*Profile, error)
+}
+
 // MachineUsecase implements machine registration and provisioning arming.
 type MachineUsecase struct {
 	machines MachineRepo
 	sessions SessionRepo
-	profiles ProfileRepo
+	profiles ProfileLookup
 	gate     DhcpGate
 	events   *EventRecorder
 	log      *slog.Logger
 }
 
 func NewMachineUsecase(
-	machines MachineRepo, sessions SessionRepo, profiles ProfileRepo,
+	machines MachineRepo, sessions SessionRepo, profiles ProfileLookup,
 	gate DhcpGate, events *EventRecorder, log *slog.Logger,
 ) *MachineUsecase {
 	return &MachineUsecase{
@@ -130,6 +136,11 @@ type ValidationError struct {
 
 func (e *ValidationError) Error() string {
 	return fmt.Sprintf("validation failed: %v", e.Fields)
+}
+
+// asValidation reports whether err is (or wraps) a *ValidationError.
+func asValidation(err error, target **ValidationError) bool {
+	return errors.As(err, target)
 }
 
 func (in *RegisterInput) validate() error {

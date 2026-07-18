@@ -44,6 +44,14 @@ type Config struct {
 	Interface   string
 	ServerIP    string
 	BootHTTPURL string
+	Addr        string // listen address, e.g. ":67"
+}
+
+func (c Config) dhcpAddr() string {
+	if c.Addr == "" {
+		return ":67"
+	}
+	return c.Addr
 }
 
 func NewServer(cfg Config, pool *LeasePool, decider BootDecider, events EventSink, conflicts *ConflictWatcher, log *slog.Logger) *Server {

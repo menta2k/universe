@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -108,6 +109,45 @@ func (s *ArtifactStore) GetByReleaseKind(ctx context.Context, release biz.Ubuntu
 func (s *ArtifactStore) GetByFilename(ctx context.Context, filename string) (*biz.Artifact, error) {
 	return scanArtifact(s.data.Pool.QueryRow(ctx,
 		`SELECT `+artifactCols+` FROM boot_artifacts WHERE filename = $1`, filename))
+}
+
+func (s *ArtifactStore) GetByID(ctx context.Context, id string) (*biz.Artifact, error) {
+	return scanArtifact(s.data.Pool.QueryRow(ctx,
+		`SELECT `+artifactCols+` FROM boot_artifacts WHERE id = $1::uuid`, id))
+}
+
+// Delete removes the metadata row then the backing file. A missing file is
+// logged and tolerated (the record is already gone, which is the goal).
+func (s *ArtifactStore) Delete(ctx context.Context, id string) error {
+	a, err := s.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	tag, err := s.data.Pool.Exec(ctx, `DELETE FROM boot_artifacts WHERE id = $1::uuid`, id)
+	if err != nil {
+		return fmt.Errorf("delete artifact row: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return biz.ErrEntityNotFound
+	}
+	if err := os.Remove(a.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		slog.Warn("artifact file removal failed", "path", a.Path, "err", err)
+	}
+	return nil
+}
+
+// ReferencedByRelease reports whether any profile targets the given release.
+// A kernel/initrd for that release is required to boot those profiles, so its
+// deletion must be blocked while at least one profile references the release.
+func (s *ArtifactStore) ReferencedByRelease(ctx context.Context, release biz.UbuntuRelease, _ biz.ArtifactKind) (bool, error) {
+	var exists bool
+	err := s.data.Pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM profiles WHERE ubuntu_release = $1::ubuntu_release)`,
+		string(release)).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check profile references: %w", err)
+	}
+	return exists, nil
 }
 
 func (s *ArtifactStore) Open(_ context.Context, a *biz.Artifact) (io.ReadCloser, error) {

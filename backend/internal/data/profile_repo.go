@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"universe/backend/internal/biz"
 )
@@ -100,6 +101,64 @@ func (r *ProfileRepo) Create(ctx context.Context, p *biz.Profile) (*biz.Profile,
 		})
 	}
 	return created, nil
+}
+
+// Update writes a new version and archives the prior state into
+// profile_revisions, transactionally.
+func (r *ProfileRepo) Update(ctx context.Context, p *biz.Profile) (*biz.Profile, error) {
+	storage, err := json.Marshal(p.StorageLayout)
+	if err != nil {
+		return nil, fmt.Errorf("marshal storage layout: %w", err)
+	}
+	network, err := json.Marshal(orEmptyMap(p.NetworkConfig))
+	if err != nil {
+		return nil, fmt.Errorf("marshal network config: %w", err)
+	}
+	tx, err := r.data.Pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Snapshot the current row into revisions before overwriting.
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO profile_revisions (profile_id, version, snapshot)
+		 SELECT id, version, to_jsonb(profiles.*) FROM profiles WHERE id = $1`, p.ID); err != nil {
+		return nil, fmt.Errorf("archive revision: %w", err)
+	}
+	updated, err := scanProfile(tx.QueryRow(ctx,
+		`UPDATE profiles SET version = $2, ubuntu_release = $3::ubuntu_release,
+		   storage_layout = $4, network_config = $5, packages = $6,
+		   ssh_authorized_keys = $7, user_data_template = NULLIF($8,''),
+		   late_commands = $9, kernel_cmdline_extra = $10, updated_at = now()
+		 WHERE id = $1 RETURNING `+profileColsSelf,
+		p.ID, p.Version, string(p.UbuntuRelease), storage, network,
+		orEmptySlice(p.Packages), p.SSHAuthorizedKeys, p.UserDataTemplate,
+		orEmptySlice(p.LateCommands), p.KernelCmdlineExtra))
+	if err != nil {
+		return nil, wrapConstraint(err, map[string]string{
+			"profiles_name_key": "profile name already in use"})
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit profile update: %w", err)
+	}
+	return updated, nil
+}
+
+// Delete removes a profile, mapping the FK RESTRICT violation to ErrProfileInUse.
+func (r *ProfileRepo) Delete(ctx context.Context, id string) error {
+	tag, err := r.data.Pool.Exec(ctx, `DELETE FROM profiles WHERE id = $1`, id)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			return biz.ErrProfileInUse
+		}
+		return fmt.Errorf("delete profile: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return biz.ErrEntityNotFound
+	}
+	return nil
 }
 
 // profileColsSelf is profileCols without the table alias, for RETURNING.
