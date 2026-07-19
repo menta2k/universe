@@ -5,7 +5,9 @@ export default defineConfig({
   plugins: [vue()],
   test: {
     environment: 'jsdom',
-    include: ['tests/**/*.spec.ts'],
+    include: ['tests/unit/**/*.spec.ts'],
+    // Playwright specs live under tests/e2e and run via `npm run test:e2e`.
+    exclude: ['tests/e2e/**', 'node_modules/**'],
     // Process vuetify through Vite so its .css imports resolve in tests.
     server: { deps: { inline: ['vuetify'] } },
     coverage: {
