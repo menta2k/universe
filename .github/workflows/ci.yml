@@ -1,45 +1,79 @@
-name: ci
+# CI — runs on every push to main and on every pull request.
+#
+# Mirrors the menta2k/iris CI layout for this stack: Go backend + an npm/Vite
+# Vue frontend, plus a full-stack Playwright E2E job. Backend and frontend run
+# in parallel; E2E runs after both. Image builds are the release workflow's job.
+
+name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 001-netboot-manager]
   pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   backend:
+    name: Backend (Go)
     runs-on: ubuntu-latest
     defaults:
-      run: { working-directory: backend }
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: "1.24", cache-dependency-path: backend/go.sum }
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
       - name: Verify generated code is up to date
         run: |
           git clone --depth 1 --branch v2.9.2 https://github.com/go-kratos/kratos /tmp/kratos
           (cd /tmp/kratos/cmd/protoc-gen-go-http && go install .)
           go run github.com/bufbuild/buf/cmd/buf@v1.50.0 generate
           git diff --exit-code -- api/
+      - name: go vet
+        run: go vet ./...
+      - name: go build
+        run: go build ./...
       - name: Lint
         uses: golangci/golangci-lint-action@v6
-        with: { working-directory: backend }
+        with:
+          working-directory: backend
+      # Race + merged coverage with the 80% gate; the DB/Valkey-backed
+      # integration tests boot their own testcontainers on the runner's Docker.
       - name: Test with coverage gate
         run: make test
 
   frontend:
+    name: Frontend (Node, npm)
     runs-on: ubuntu-latest
     defaults:
-      run: { working-directory: frontend }
+      run:
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: "22", cache: npm, cache-dependency-path: frontend/package-lock.json }
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - run: npm ci
-      - run: npm run lint
-      - run: npm run build
-      - run: npm test -- --run
+      - name: Lint
+        run: npm run lint
+      # `npm run build` runs vue-tsc first, so it covers typecheck + bundle.
+      - name: typecheck + build
+        run: npm run build
+      - name: unit tests (coverage)
+        run: npm run coverage
 
   e2e:
+    name: E2E (Playwright, full stack)
     runs-on: ubuntu-latest
     needs: [backend, frontend]
     services:
@@ -49,19 +83,24 @@ jobs:
           POSTGRES_DB: netboot
           POSTGRES_USER: netboot
           POSTGRES_PASSWORD: netboot-dev
-        ports: ["5432:5432"]
+        ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U netboot" --health-interval 5s
           --health-timeout 3s --health-retries 10
       valkey:
         image: valkey/valkey:8.0
-        ports: ["6379:6379"]
+        ports: ['6379:6379']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: "1.24", cache-dependency-path: backend/go.sum }
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
       - uses: actions/setup-node@v4
-        with: { node-version: "22", cache: npm, cache-dependency-path: frontend/package-lock.json }
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - name: Start backend
         working-directory: backend
         run: |
@@ -76,4 +115,6 @@ jobs:
           npm run test:e2e
       - uses: actions/upload-artifact@v4
         if: failure()
-        with: { name: playwright-report, path: frontend/playwright-report/ }
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/

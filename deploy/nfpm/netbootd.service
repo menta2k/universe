@@ -1,0 +1,22 @@
+[Unit]
+Description=Netboot Manager daemon (admin API, web UI, DHCP/TFTP/boot-HTTP)
+Documentation=https://github.com/menta2k/universe
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/netbootd -conf /etc/netbootd/netbootd.yaml
+Restart=on-failure
+RestartSec=5
+# DHCP (67/udp), TFTP (69/udp) and raw-socket broadcast answers need these;
+# everything else runs unprivileged.
+AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_RAW CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_RAW CAP_NET_ADMIN
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+StateDirectory=netbootd
+
+[Install]
+WantedBy=multi-user.target

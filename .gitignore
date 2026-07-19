@@ -36,3 +36,7 @@ Thumbs.db
 # E2E scratch
 backend/tests/e2e/.work/
 .coverdata/
+
+# Release packaging scratch (nfpm)
+deploy/nfpm/pkg-staging/
+deploy/nfpm/out/
