@@ -3,14 +3,23 @@
  * Create / edit profile dialog. Organised into guided sections with the
  * advanced/raw fields tucked behind an expansion panel so the common path
  * stays simple. Network is captured with a friendly mode selector
- * (Automatic / Static / Advanced JSON) and serialised to netplan. Validates
- * locally and renders server-side 422 field errors inline; serialises
- * storage_layout and network_config to JSON strings for the parent's API call.
+ * (Automatic / Static per-interface / Advanced JSON) and serialised to
+ * netplan; the static mode supports any number of NICs. Validates locally and
+ * renders server-side 422 field errors inline; serialises storage_layout and
+ * network_config to JSON strings for the parent's API call.
  */
 import { computed, ref, watch } from 'vue'
 
 import type { ProfileInput } from '../api/profiles'
 import type { Profile, StorageMode, UbuntuRelease } from '../api/types'
+import {
+  defaultNic,
+  emptyNic,
+  parseNetworkConfig,
+  serializeNics,
+  validateNics,
+  type NicForm,
+} from '../utils/netplan'
 
 export type ProfileEditorMode = 'create' | 'edit'
 type NetworkMode = 'dhcp' | 'static' | 'advanced'
@@ -23,9 +32,7 @@ interface ProfileFormState {
   storageMode: StorageMode
   storageCustom: string
   networkMode: NetworkMode
-  staticAddress: string
-  staticGateway: string
-  staticDns: string[]
+  nics: NicForm[]
   networkConfig: string
   packages: string[]
   sshKeys: string[]
@@ -141,7 +148,8 @@ const NETWORK_OPTIONS: readonly {
   },
   {
     title: 'Static IP',
-    description: 'Assign a fixed address, gateway and DNS servers.',
+    description:
+      'Configure one or more interfaces with fixed addresses, gateways and DNS.',
     icon: 'mdi-ip-network',
     value: 'static',
   },
@@ -175,9 +183,7 @@ function emptyForm(): ProfileFormState {
     storageMode: 'lvm',
     storageCustom: '',
     networkMode: 'dhcp',
-    staticAddress: '',
-    staticGateway: '',
-    staticDns: [],
+    nics: [defaultNic()],
     networkConfig: '',
     packages: [],
     sshKeys: [''],
@@ -187,28 +193,13 @@ function emptyForm(): ProfileFormState {
   }
 }
 
-// networkFromConfig detects DHCP / Static / Advanced from a stored netplan map
-// so editing round-trips cleanly.
+// networkFromConfig maps the parsed netplan config onto the form so editing
+// round-trips cleanly (DHCP / per-NIC static / raw advanced JSON).
 function networkFromConfig(config: Record<string, unknown>): Partial<ProfileFormState> {
-  if (!config || Object.keys(config).length === 0) {
-    return { networkMode: 'dhcp' }
-  }
-  const ethernets = (config as { ethernets?: Record<string, unknown> }).ethernets
-  const entries = ethernets ? Object.values(ethernets) : []
-  const first = entries[0] as
-    | { addresses?: string[]; routes?: { to?: string; via?: string }[]; gateway4?: string; nameservers?: { addresses?: string[] } }
-    | undefined
-  if (entries.length === 1 && first?.addresses?.length) {
-    const gateway =
-      first.gateway4 ?? first.routes?.find((r) => r.to === 'default')?.via ?? ''
-    return {
-      networkMode: 'static',
-      staticAddress: first.addresses[0] ?? '',
-      staticGateway: gateway,
-      staticDns: first.nameservers?.addresses ?? [],
-    }
-  }
-  return { networkMode: 'advanced', networkConfig: JSON.stringify(config, null, 2) }
+  const parsed = parseNetworkConfig(config)
+  if (parsed.mode === 'static') return { networkMode: 'static', nics: parsed.nics }
+  if (parsed.mode === 'advanced') return { networkMode: 'advanced', networkConfig: parsed.raw }
+  return { networkMode: 'dhcp' }
 }
 
 function fromProfile(profile: Profile): ProfileFormState {
@@ -237,8 +228,6 @@ const advancedOpen = ref<number[]>([])
 const title = computed(() => (props.mode === 'edit' ? 'Edit profile' : 'New profile'))
 
 const SSH_KEY_RE = /^(ssh-(rsa|ed25519|dss)|ecdsa-sha2-\S+|sk-ssh-\S+)\s+\S+/
-const CIDR_RE = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/
-const IPV4_RE = /^(\d{1,3}\.){3}\d{1,3}$/
 
 function sshKeyState(key: string): 'empty' | 'valid' | 'invalid' {
   const trimmed = key.trim()
@@ -260,10 +249,7 @@ const localErrors = computed<Readonly<Record<string, string>>>(() => {
     errors.kernel_cmdline_extra = 'Kernel cmdline must not contain newlines'
 
   if (form.value.networkMode === 'static') {
-    if (!CIDR_RE.test(form.value.staticAddress.trim()))
-      errors.network_config = 'Enter an IP address with prefix, e.g. 192.168.1.50/24'
-    else if (form.value.staticGateway.trim() && !IPV4_RE.test(form.value.staticGateway.trim()))
-      errors.network_config = 'Gateway must be a valid IPv4 address'
+    Object.assign(errors, validateNics(form.value.nics))
   } else if (form.value.networkMode === 'advanced') {
     const network = form.value.networkConfig.trim()
     if (network) {
@@ -334,23 +320,27 @@ function serializeStorage(): string {
 }
 
 // serializeNetwork turns the friendly network form into a netplan JSON string.
-// Automatic → empty (installer defaults to DHCP); Static → a single ethernet
-// with the address/gateway/DNS; Advanced → the raw JSON verbatim.
+// Automatic → empty (installer defaults to DHCP); Static → one ethernet per
+// configured NIC; Advanced → the raw JSON verbatim.
 function serializeNetwork(): string {
   if (form.value.networkMode === 'dhcp') return ''
   if (form.value.networkMode === 'advanced') {
     const raw = form.value.networkConfig.trim()
     return raw ? JSON.stringify(JSON.parse(raw)) : ''
   }
-  const eth: Record<string, unknown> = {
-    match: { name: 'en*' },
-    addresses: [form.value.staticAddress.trim()],
-  }
-  const gateway = form.value.staticGateway.trim()
-  if (gateway) eth.routes = [{ to: 'default', via: gateway }]
-  const dns = form.value.staticDns.map((d) => d.trim()).filter(Boolean)
-  if (dns.length) eth.nameservers = { addresses: dns }
-  return JSON.stringify({ version: 2, ethernets: { primary: eth } })
+  return serializeNics(form.value.nics)
+}
+
+function addNic(): void {
+  form.value.nics = [...form.value.nics, emptyNic()]
+}
+
+function removeNic(index: number): void {
+  form.value.nics = form.value.nics.filter((_, i) => i !== index)
+}
+
+function updateNic(index: number, patch: Partial<NicForm>): void {
+  form.value.nics = form.value.nics.map((nic, i) => (i === index ? { ...nic, ...patch } : nic))
 }
 
 function close(): void {
@@ -629,39 +619,137 @@ defineExpose({ form, submit, localErrors })
           </v-radio-group>
 
           <div v-if="form.networkMode === 'static'" class="mt-2">
-            <v-text-field
-              v-model="form.staticAddress"
-              class="mb-2 text-mono"
-              data-testid="field-static-address"
-              :error-messages="fieldErrors('network_config')"
-              hint="IP address with prefix length."
-              label="IP address / CIDR"
-              persistent-hint
-              placeholder="192.168.1.50/24"
-              prepend-inner-icon="mdi-ip"
-              variant="outlined"
+            <v-alert
+              v-if="fieldErrors('network_config').length > 0"
+              class="mb-3"
+              density="compact"
+              :text="fieldErrors('network_config').join(' ')"
+              type="error"
+              variant="tonal"
             />
-            <v-text-field
-              v-model="form.staticGateway"
-              class="mb-2 text-mono"
-              data-testid="field-static-gateway"
-              label="Gateway (optional)"
-              placeholder="192.168.1.1"
-              prepend-inner-icon="mdi-router-network"
-              variant="outlined"
-            />
-            <v-combobox
-              v-model="form.staticDns"
-              chips
-              closable-chips
-              data-testid="field-static-dns"
-              hint="DNS servers. Press Enter to add each one."
-              label="DNS servers (optional)"
-              multiple
-              persistent-hint
-              prepend-inner-icon="mdi-dns"
-              variant="outlined"
-            />
+            <v-sheet
+              v-for="(nic, index) in form.nics"
+              :key="`nic-${index}`"
+              border
+              class="mb-3 pa-3"
+              rounded="lg"
+            >
+              <div class="d-flex align-center mb-3">
+                <v-icon class="mr-2" icon="mdi-expansion-card" size="18" />
+                <span class="text-body-2 font-weight-medium">Interface {{ index + 1 }}</span>
+                <v-spacer />
+                <v-btn-toggle
+                  color="primary"
+                  :data-testid="`field-nic-${index}-mode`"
+                  density="compact"
+                  divided
+                  mandatory
+                  :model-value="nic.dhcp"
+                  variant="outlined"
+                  @update:model-value="updateNic(index, { dhcp: $event === true })"
+                >
+                  <v-btn size="small" :value="false">Static</v-btn>
+                  <v-btn size="small" :value="true">DHCP</v-btn>
+                </v-btn-toggle>
+                <v-btn
+                  class="ml-1"
+                  :disabled="form.nics.length <= 1"
+                  icon="mdi-close"
+                  size="small"
+                  title="Remove interface"
+                  variant="text"
+                  @click="removeNic(index)"
+                />
+              </div>
+              <div class="d-flex ga-2 flex-wrap">
+                <v-text-field
+                  class="flex-grow-1 text-mono"
+                  :data-testid="`field-nic-${index}-name`"
+                  density="compact"
+                  :error-messages="fieldErrors(`nic_${index}_name`)"
+                  hint="Exact name (eno1) or pattern (en*)."
+                  label="Interface name"
+                  :model-value="nic.name"
+                  persistent-hint
+                  placeholder="eno1"
+                  prepend-inner-icon="mdi-ethernet"
+                  style="min-width: 180px"
+                  variant="outlined"
+                  @update:model-value="updateNic(index, { name: $event })"
+                />
+                <v-text-field
+                  class="flex-grow-1 text-mono"
+                  :data-testid="`field-nic-${index}-mac`"
+                  density="compact"
+                  :error-messages="fieldErrors(`nic_${index}_mac`)"
+                  hint="Match the NIC by hardware address instead."
+                  label="MAC address (optional)"
+                  :model-value="nic.mac"
+                  persistent-hint
+                  placeholder="aa:bb:cc:dd:ee:ff"
+                  prepend-inner-icon="mdi-hexadecimal"
+                  style="min-width: 200px"
+                  variant="outlined"
+                  @update:model-value="updateNic(index, { mac: $event })"
+                />
+              </div>
+              <template v-if="!nic.dhcp">
+                <div class="d-flex ga-2 flex-wrap mt-2">
+                  <v-text-field
+                    class="flex-grow-1 text-mono"
+                    :data-testid="`field-nic-${index}-address`"
+                    density="compact"
+                    :error-messages="fieldErrors(`nic_${index}_address`)"
+                    hint="IP address with prefix length."
+                    label="IP address / CIDR"
+                    :model-value="nic.address"
+                    persistent-hint
+                    placeholder="192.168.1.50/24"
+                    prepend-inner-icon="mdi-ip"
+                    style="min-width: 200px"
+                    variant="outlined"
+                    @update:model-value="updateNic(index, { address: $event })"
+                  />
+                  <v-text-field
+                    class="flex-grow-1 text-mono"
+                    :data-testid="`field-nic-${index}-gateway`"
+                    density="compact"
+                    :error-messages="fieldErrors(`nic_${index}_gateway`)"
+                    label="Gateway (optional)"
+                    :model-value="nic.gateway"
+                    placeholder="192.168.1.1"
+                    prepend-inner-icon="mdi-router-network"
+                    style="min-width: 180px"
+                    variant="outlined"
+                    @update:model-value="updateNic(index, { gateway: $event })"
+                  />
+                </div>
+                <v-combobox
+                  chips
+                  class="mt-2"
+                  closable-chips
+                  :data-testid="`field-nic-${index}-dns`"
+                  density="compact"
+                  hint="DNS servers. Press Enter to add each one."
+                  label="DNS servers (optional)"
+                  :model-value="nic.dns"
+                  multiple
+                  persistent-hint
+                  prepend-inner-icon="mdi-dns"
+                  variant="outlined"
+                  @update:model-value="updateNic(index, { dns: $event })"
+                />
+              </template>
+            </v-sheet>
+            <v-btn
+              data-testid="add-nic"
+              prepend-icon="mdi-plus"
+              size="small"
+              variant="tonal"
+              @click="addNic"
+            >
+              Add interface
+            </v-btn>
           </div>
           <v-textarea
             v-else-if="form.networkMode === 'advanced'"

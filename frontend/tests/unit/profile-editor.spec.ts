@@ -7,6 +7,15 @@ import * as directives from 'vuetify/directives'
 import type { ProfileInput } from '../../src/api/profiles'
 import ProfileEditor from '../../src/components/ProfileEditor.vue'
 
+interface NicVm {
+  name: string
+  mac: string
+  dhcp: boolean
+  address: string
+  gateway: string
+  dns: string[]
+}
+
 interface EditorVm {
   form: {
     name: string
@@ -16,9 +25,7 @@ interface EditorVm {
     storageMode: string
     storageCustom: string
     networkMode: string
-    staticAddress: string
-    staticGateway: string
-    staticDns: string[]
+    nics: NicVm[]
     networkConfig: string
     packages: string[]
     sshKeys: string[]
@@ -155,17 +162,59 @@ describe('components/ProfileEditor', () => {
     vm.form.name = 'ubuntu-server'
     vm.form.sshKeys = ['ssh-ed25519 AAAA']
     vm.form.networkMode = 'static'
-    vm.form.staticAddress = '192.168.1.50/24'
-    vm.form.staticGateway = '192.168.1.1'
-    vm.form.staticDns = ['1.1.1.1']
+    vm.form.nics = [
+      {
+        name: 'en*',
+        mac: '',
+        dhcp: false,
+        address: '192.168.1.50/24',
+        gateway: '192.168.1.1',
+        dns: ['1.1.1.1'],
+      },
+    ]
     vm.submit()
     await wrapper.vm.$nextTick()
 
     const values = wrapper.emitted('save')?.[0]?.[0] as ProfileInput
     const netplan = JSON.parse(values.network_config)
-    expect(netplan.ethernets.primary.addresses).toEqual(['192.168.1.50/24'])
-    expect(netplan.ethernets.primary.routes).toEqual([{ to: 'default', via: '192.168.1.1' }])
-    expect(netplan.ethernets.primary.nameservers).toEqual({ addresses: ['1.1.1.1'] })
+    expect(netplan.ethernets.nic0.match).toEqual({ name: 'en*' })
+    expect(netplan.ethernets.nic0.addresses).toEqual(['192.168.1.50/24'])
+    expect(netplan.ethernets.nic0.routes).toEqual([{ to: 'default', via: '192.168.1.1' }])
+    expect(netplan.ethernets.nic0.nameservers).toEqual({ addresses: ['1.1.1.1'] })
+  })
+
+  it('serializes multiple NICs into netplan', async () => {
+    const wrapper = mountEditor()
+    const vm = wrapper.vm as unknown as EditorVm
+
+    vm.form.name = 'ubuntu-server'
+    vm.form.sshKeys = ['ssh-ed25519 AAAA']
+    vm.form.networkMode = 'static'
+    vm.form.nics = [
+      {
+        name: 'eno1',
+        mac: '',
+        dhcp: false,
+        address: '10.0.0.5/24',
+        gateway: '10.0.0.1',
+        dns: ['10.0.0.2'],
+      },
+      { name: '', mac: 'AA:BB:CC:DD:EE:FF', dhcp: true, address: '', gateway: '', dns: [] },
+    ]
+    vm.submit()
+    await wrapper.vm.$nextTick()
+
+    const values = wrapper.emitted('save')?.[0]?.[0] as ProfileInput
+    const netplan = JSON.parse(values.network_config)
+    expect(netplan.ethernets.eno1).toEqual({
+      addresses: ['10.0.0.5/24'],
+      routes: [{ to: 'default', via: '10.0.0.1' }],
+      nameservers: { addresses: ['10.0.0.2'] },
+    })
+    expect(netplan.ethernets.nic1).toEqual({
+      match: { macaddress: 'aa:bb:cc:dd:ee:ff' },
+      dhcp4: true,
+    })
   })
 
   it('blocks a static network with an invalid address', async () => {
@@ -175,12 +224,75 @@ describe('components/ProfileEditor', () => {
     vm.form.name = 'ubuntu-server'
     vm.form.sshKeys = ['ssh-ed25519 AAAA']
     vm.form.networkMode = 'static'
-    vm.form.staticAddress = 'not-an-ip'
+    vm.form.nics = [
+      { name: 'en*', mac: '', dhcp: false, address: 'not-an-ip', gateway: '', dns: [] },
+    ]
     vm.submit()
     await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('save')).toBeUndefined()
-    expect(vm.localErrors.network_config).toContain('192.168')
+    expect(vm.localErrors.nic_0_address).toContain('192.168')
+  })
+
+  it('blocks duplicate interface names and invalid MACs', async () => {
+    const wrapper = mountEditor()
+    const vm = wrapper.vm as unknown as EditorVm
+
+    vm.form.name = 'ubuntu-server'
+    vm.form.sshKeys = ['ssh-ed25519 AAAA']
+    vm.form.networkMode = 'static'
+    vm.form.nics = [
+      { name: 'eno1', mac: '', dhcp: true, address: '', gateway: '', dns: [] },
+      { name: 'eno1', mac: 'nope', dhcp: true, address: '', gateway: '', dns: [] },
+    ]
+    vm.submit()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.emitted('save')).toBeUndefined()
+    expect(vm.localErrors.nic_1_name).toContain('twice')
+    expect(vm.localErrors.nic_1_mac).toContain('MAC')
+  })
+
+  it('round-trips a multi-NIC profile back into the static form', async () => {
+    const networkConfig = {
+      version: 2,
+      ethernets: {
+        eno1: {
+          addresses: ['10.0.0.5/24'],
+          routes: [{ to: 'default', via: '10.0.0.1' }],
+          nameservers: { addresses: ['10.0.0.2'] },
+        },
+        nic1: { match: { macaddress: 'aa:bb:cc:dd:ee:ff' }, dhcp4: true },
+      },
+    }
+    const wrapper = mountEditor({
+      mode: 'edit' as const,
+      initial: {
+        id: 'p1',
+        name: 'multi-nic',
+        ubuntu_release: 'noble' as const,
+        keyboard_layout: 'us',
+        keyboard_variant: '',
+        locale: '',
+        timezone: '',
+        storage_layout: { mode: 'lvm' as const },
+        network_config: networkConfig,
+        packages: [],
+        ssh_authorized_keys: ['ssh-ed25519 AAAA'],
+        user_data_template: null,
+        late_commands: [],
+        kernel_cmdline_extra: '',
+        created_at: '',
+        updated_at: '',
+      } as never,
+    })
+    await wrapper.vm.$nextTick()
+    const vm = wrapper.vm as unknown as EditorVm
+
+    expect(vm.form.networkMode).toBe('static')
+    expect(vm.form.nics).toHaveLength(2)
+    expect(vm.form.nics[0]).toMatchObject({ name: 'eno1', dhcp: false, address: '10.0.0.5/24' })
+    expect(vm.form.nics[1]).toMatchObject({ mac: 'aa:bb:cc:dd:ee:ff', dhcp: true })
   })
 
   it('serializes custom storage with its body', async () => {
