@@ -2,11 +2,10 @@
 /**
  * Create / edit profile dialog. Organised into guided sections with the
  * advanced/raw fields tucked behind an expansion panel so the common path
- * stays simple. Validates locally (name, >=1 SSH key, custom storage body, no
- * newline in kernel cmdline, JSON network config) and renders server-side 422
- * field errors inline. Serialises storage_layout and network_config to JSON
- * strings; the parent owns the API call and passes failures back via
- * `serverErrors`.
+ * stays simple. Network is captured with a friendly mode selector
+ * (Automatic / Static / Advanced JSON) and serialised to netplan. Validates
+ * locally and renders server-side 422 field errors inline; serialises
+ * storage_layout and network_config to JSON strings for the parent's API call.
  */
 import { computed, ref, watch } from 'vue'
 
@@ -14,12 +13,19 @@ import type { ProfileInput } from '../api/profiles'
 import type { Profile, StorageMode, UbuntuRelease } from '../api/types'
 
 export type ProfileEditorMode = 'create' | 'edit'
+type NetworkMode = 'dhcp' | 'static' | 'advanced'
 
 interface ProfileFormState {
   name: string
   ubuntu_release: UbuntuRelease
+  keyboardLayout: string
+  timezone: string
   storageMode: StorageMode
   storageCustom: string
+  networkMode: NetworkMode
+  staticAddress: string
+  staticGateway: string
+  staticDns: string[]
   networkConfig: string
   packages: string[]
   sshKeys: string[]
@@ -50,6 +56,51 @@ const RELEASE_OPTIONS: readonly {
   { title: 'Ubuntu 22.04 LTS', subtitle: 'Jammy Jellyfish', value: 'jammy' },
 ]
 
+// Common keyboard layouts (subiquity layout codes) with human labels.
+const KEYBOARD_OPTIONS: readonly { title: string; value: string }[] = [
+  { title: 'English (US)', value: 'us' },
+  { title: 'English (UK)', value: 'gb' },
+  { title: 'German', value: 'de' },
+  { title: 'French', value: 'fr' },
+  { title: 'Spanish', value: 'es' },
+  { title: 'Italian', value: 'it' },
+  { title: 'Portuguese', value: 'pt' },
+  { title: 'Portuguese (Brazil)', value: 'br' },
+  { title: 'Dutch', value: 'nl' },
+  { title: 'Swedish', value: 'se' },
+  { title: 'Norwegian', value: 'no' },
+  { title: 'Danish', value: 'dk' },
+  { title: 'Finnish', value: 'fi' },
+  { title: 'Polish', value: 'pl' },
+  { title: 'Czech', value: 'cz' },
+  { title: 'Russian', value: 'ru' },
+  { title: 'Turkish', value: 'tr' },
+  { title: 'Japanese', value: 'jp' },
+  { title: 'Bulgarian', value: 'bg' },
+]
+
+// A curated timezone list; the field also accepts a free-typed IANA name.
+const TIMEZONE_OPTIONS: readonly string[] = [
+  'Etc/UTC',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Sao_Paulo',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Europe/Madrid',
+  'Europe/Sofia',
+  'Europe/Moscow',
+  'Africa/Johannesburg',
+  'Asia/Dubai',
+  'Asia/Kolkata',
+  'Asia/Shanghai',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+]
+
 const STORAGE_OPTIONS: readonly {
   title: string
   description: string
@@ -76,7 +127,32 @@ const STORAGE_OPTIONS: readonly {
   },
 ]
 
-// Common server packages offered as one-click suggestions.
+const NETWORK_OPTIONS: readonly {
+  title: string
+  description: string
+  icon: string
+  value: NetworkMode
+}[] = [
+  {
+    title: 'Automatic (DHCP)',
+    description: 'Get an address automatically on all interfaces. Best for most setups.',
+    icon: 'mdi-lan',
+    value: 'dhcp',
+  },
+  {
+    title: 'Static IP',
+    description: 'Assign a fixed address, gateway and DNS servers.',
+    icon: 'mdi-ip-network',
+    value: 'static',
+  },
+  {
+    title: 'Advanced',
+    description: 'Write raw netplan JSON for full control.',
+    icon: 'mdi-code-json',
+    value: 'advanced',
+  },
+]
+
 const PACKAGE_SUGGESTIONS: readonly string[] = [
   'openssh-server',
   'curl',
@@ -94,8 +170,14 @@ function emptyForm(): ProfileFormState {
   return {
     name: '',
     ubuntu_release: 'noble',
+    keyboardLayout: 'us',
+    timezone: '',
     storageMode: 'lvm',
     storageCustom: '',
+    networkMode: 'dhcp',
+    staticAddress: '',
+    staticGateway: '',
+    staticDns: [],
     networkConfig: '',
     packages: [],
     sshKeys: [''],
@@ -105,20 +187,46 @@ function emptyForm(): ProfileFormState {
   }
 }
 
+// networkFromConfig detects DHCP / Static / Advanced from a stored netplan map
+// so editing round-trips cleanly.
+function networkFromConfig(config: Record<string, unknown>): Partial<ProfileFormState> {
+  if (!config || Object.keys(config).length === 0) {
+    return { networkMode: 'dhcp' }
+  }
+  const ethernets = (config as { ethernets?: Record<string, unknown> }).ethernets
+  const entries = ethernets ? Object.values(ethernets) : []
+  const first = entries[0] as
+    | { addresses?: string[]; routes?: { to?: string; via?: string }[]; gateway4?: string; nameservers?: { addresses?: string[] } }
+    | undefined
+  if (entries.length === 1 && first?.addresses?.length) {
+    const gateway =
+      first.gateway4 ?? first.routes?.find((r) => r.to === 'default')?.via ?? ''
+    return {
+      networkMode: 'static',
+      staticAddress: first.addresses[0] ?? '',
+      staticGateway: gateway,
+      staticDns: first.nameservers?.addresses ?? [],
+    }
+  }
+  return { networkMode: 'advanced', networkConfig: JSON.stringify(config, null, 2) }
+}
+
 function fromProfile(profile: Profile): ProfileFormState {
-  const network = profile.network_config
-  const hasNetwork = network && Object.keys(network).length > 0
+  const base = emptyForm()
   return {
+    ...base,
     name: profile.name,
     ubuntu_release: profile.ubuntu_release,
+    keyboardLayout: profile.keyboard_layout || 'us',
+    timezone: profile.timezone ?? '',
     storageMode: profile.storage_layout.mode,
     storageCustom: profile.storage_layout.custom ?? '',
-    networkConfig: hasNetwork ? JSON.stringify(network, null, 2) : '',
     packages: [...profile.packages],
     sshKeys: profile.ssh_authorized_keys.length > 0 ? [...profile.ssh_authorized_keys] : [''],
     lateCommands: [...profile.late_commands],
     kernelCmdlineExtra: profile.kernel_cmdline_extra,
     userDataTemplate: profile.user_data_template ?? '',
+    ...networkFromConfig(profile.network_config),
   }
 }
 
@@ -128,8 +236,9 @@ const advancedOpen = ref<number[]>([])
 
 const title = computed(() => (props.mode === 'edit' ? 'Edit profile' : 'New profile'))
 
-// A public key looks like "<type> <base64> [comment]".
 const SSH_KEY_RE = /^(ssh-(rsa|ed25519|dss)|ecdsa-sha2-\S+|sk-ssh-\S+)\s+\S+/
+const CIDR_RE = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/
+const IPV4_RE = /^(\d{1,3}\.){3}\d{1,3}$/
 
 function sshKeyState(key: string): 'empty' | 'valid' | 'invalid' {
   const trimmed = key.trim()
@@ -150,20 +259,25 @@ const localErrors = computed<Readonly<Record<string, string>>>(() => {
   if (form.value.kernelCmdlineExtra.includes('\n'))
     errors.kernel_cmdline_extra = 'Kernel cmdline must not contain newlines'
 
-  const network = form.value.networkConfig.trim()
-  if (network) {
-    try {
-      JSON.parse(network)
-    } catch {
-      errors.network_config = 'Network config must be valid JSON'
+  if (form.value.networkMode === 'static') {
+    if (!CIDR_RE.test(form.value.staticAddress.trim()))
+      errors.network_config = 'Enter an IP address with prefix, e.g. 192.168.1.50/24'
+    else if (form.value.staticGateway.trim() && !IPV4_RE.test(form.value.staticGateway.trim()))
+      errors.network_config = 'Gateway must be a valid IPv4 address'
+  } else if (form.value.networkMode === 'advanced') {
+    const network = form.value.networkConfig.trim()
+    if (network) {
+      try {
+        JSON.parse(network)
+      } catch {
+        errors.network_config = 'Network config must be valid JSON'
+      }
     }
   }
   return errors
 })
 
 const isValid = computed(() => Object.keys(localErrors.value).length === 0)
-
-// Count of remaining problems, surfaced in the footer for quick feedback.
 const errorCount = computed(() => (submitted.value ? Object.keys(localErrors.value).length : 0))
 
 function fieldErrors(field: string): readonly string[] {
@@ -174,11 +288,9 @@ function fieldErrors(field: string): readonly string[] {
   return messages
 }
 
-// Advanced fields hold non-default content — used to auto-open the panel on edit.
 function hasAdvancedContent(state: ProfileFormState): boolean {
   return Boolean(
-    state.networkConfig.trim() ||
-      state.lateCommands.some((c) => c.trim()) ||
+    state.lateCommands.some((c) => c.trim()) ||
       state.kernelCmdlineExtra.trim() ||
       state.userDataTemplate.trim(),
   )
@@ -221,10 +333,24 @@ function serializeStorage(): string {
   return JSON.stringify({ mode: form.value.storageMode })
 }
 
+// serializeNetwork turns the friendly network form into a netplan JSON string.
+// Automatic → empty (installer defaults to DHCP); Static → a single ethernet
+// with the address/gateway/DNS; Advanced → the raw JSON verbatim.
 function serializeNetwork(): string {
-  const raw = form.value.networkConfig.trim()
-  if (!raw) return ''
-  return JSON.stringify(JSON.parse(raw))
+  if (form.value.networkMode === 'dhcp') return ''
+  if (form.value.networkMode === 'advanced') {
+    const raw = form.value.networkConfig.trim()
+    return raw ? JSON.stringify(JSON.parse(raw)) : ''
+  }
+  const eth: Record<string, unknown> = {
+    match: { name: 'en*' },
+    addresses: [form.value.staticAddress.trim()],
+  }
+  const gateway = form.value.staticGateway.trim()
+  if (gateway) eth.routes = [{ to: 'default', via: gateway }]
+  const dns = form.value.staticDns.map((d) => d.trim()).filter(Boolean)
+  if (dns.length) eth.nameservers = { addresses: dns }
+  return JSON.stringify({ version: 2, ethernets: { primary: eth } })
 }
 
 function close(): void {
@@ -234,14 +360,16 @@ function close(): void {
 function submit(): void {
   submitted.value = true
   if (!isValid.value) {
-    // Reveal advanced fields if that is where the remaining errors live.
-    if (localErrors.value.network_config || localErrors.value.kernel_cmdline_extra)
-      advancedOpen.value = [0]
+    if (localErrors.value.kernel_cmdline_extra) advancedOpen.value = [0]
     return
   }
   emit('save', {
     name: form.value.name.trim(),
     ubuntu_release: form.value.ubuntu_release,
+    keyboard_layout: form.value.keyboardLayout,
+    keyboard_variant: '',
+    locale: '',
+    timezone: form.value.timezone.trim(),
     storage_layout: serializeStorage(),
     network_config: serializeNetwork(),
     packages: form.value.packages.map((p) => p.trim()).filter(Boolean),
@@ -270,7 +398,7 @@ defineExpose({ form, submit, localErrors })
         </v-card-title>
         <v-card-subtitle class="text-wrap">
           A profile is a reusable recipe for an unattended Ubuntu install — pick a release,
-          grant SSH access, choose disk layout, and you can assign it to any machine.
+          set the system basics, grant SSH access, and choose disk and network.
         </v-card-subtitle>
       </v-card-item>
 
@@ -278,7 +406,7 @@ defineExpose({ form, submit, localErrors })
 
       <v-card-text class="px-6 py-4" style="max-height: 68vh">
         <v-form @submit.prevent="submit">
-          <!-- 1. Identity -->
+          <!-- 1. Basics -->
           <div class="section-label">
             <v-icon icon="mdi-tag-outline" size="18" />
             <span>Basics</span>
@@ -319,7 +447,53 @@ defineExpose({ form, submit, localErrors })
             </v-btn>
           </v-btn-toggle>
 
-          <!-- 2. Access -->
+          <v-alert
+            class="mt-3"
+            density="compact"
+            icon="mdi-server"
+            variant="tonal"
+          >
+            <span class="text-body-2">
+              Each machine's <strong>hostname</strong> is its name — you set that when you
+              register the machine, so one profile can serve many hosts.
+            </span>
+          </v-alert>
+
+          <!-- 2. System -->
+          <div class="section-label mt-6">
+            <v-icon icon="mdi-cog-outline" size="18" />
+            <span>System settings</span>
+          </div>
+          <div class="d-flex ga-3 flex-wrap">
+            <v-select
+              v-model="form.keyboardLayout"
+              class="flex-grow-1"
+              data-testid="field-keyboard"
+              hint="Keyboard layout for the console."
+              item-title="title"
+              item-value="value"
+              :items="KEYBOARD_OPTIONS"
+              label="Keyboard layout"
+              persistent-hint
+              prepend-inner-icon="mdi-keyboard-outline"
+              style="min-width: 220px"
+              variant="outlined"
+            />
+            <v-combobox
+              v-model="form.timezone"
+              class="flex-grow-1"
+              data-testid="field-timezone"
+              hint="Leave blank to keep UTC."
+              :items="TIMEZONE_OPTIONS"
+              label="Time zone"
+              persistent-hint
+              prepend-inner-icon="mdi-clock-outline"
+              style="min-width: 220px"
+              variant="outlined"
+            />
+          </div>
+
+          <!-- 3. Access -->
           <div class="section-label mt-6">
             <v-icon icon="mdi-key-chain" size="18" />
             <span>SSH access</span>
@@ -376,23 +550,18 @@ defineExpose({ form, submit, localErrors })
               @click="removeSshKey(index)"
             />
           </div>
-          <v-btn
-            prepend-icon="mdi-plus"
-            size="small"
-            variant="tonal"
-            @click="addSshKey"
-          >
+          <v-btn prepend-icon="mdi-plus" size="small" variant="tonal" @click="addSshKey">
             Add another key
           </v-btn>
 
-          <!-- 3. Storage -->
+          <!-- 4. Storage -->
           <div class="section-label mt-6">
             <v-icon icon="mdi-harddisk" size="18" />
             <span>Disk layout</span>
           </div>
           <v-radio-group
             v-model="form.storageMode"
-            class="storage-group"
+            class="choice-group"
             data-testid="field-storage-mode"
             hide-details
           >
@@ -400,8 +569,8 @@ defineExpose({ form, submit, localErrors })
               v-for="opt in STORAGE_OPTIONS"
               :key="opt.value"
               border
-              class="storage-card mb-2 pa-3"
-              :class="{ 'storage-card--active': form.storageMode === opt.value }"
+              class="choice-card mb-2 pa-3"
+              :class="{ 'choice-card--active': form.storageMode === opt.value }"
               rounded="lg"
               @click="form.storageMode = opt.value"
             >
@@ -428,7 +597,87 @@ defineExpose({ form, submit, localErrors })
             variant="outlined"
           />
 
-          <!-- 4. Software -->
+          <!-- 5. Network -->
+          <div class="section-label mt-6">
+            <v-icon icon="mdi-ip-network-outline" size="18" />
+            <span>Network</span>
+          </div>
+          <v-radio-group
+            v-model="form.networkMode"
+            class="choice-group"
+            data-testid="field-network-mode"
+            hide-details
+          >
+            <v-sheet
+              v-for="opt in NETWORK_OPTIONS"
+              :key="opt.value"
+              border
+              class="choice-card mb-2 pa-3"
+              :class="{ 'choice-card--active': form.networkMode === opt.value }"
+              rounded="lg"
+              @click="form.networkMode = opt.value"
+            >
+              <div class="d-flex align-center ga-3">
+                <v-radio :value="opt.value" />
+                <v-icon :icon="opt.icon" />
+                <div>
+                  <div class="text-body-1 font-weight-medium">{{ opt.title }}</div>
+                  <div class="text-caption text-medium-emphasis">{{ opt.description }}</div>
+                </div>
+              </div>
+            </v-sheet>
+          </v-radio-group>
+
+          <div v-if="form.networkMode === 'static'" class="mt-2">
+            <v-text-field
+              v-model="form.staticAddress"
+              class="mb-2 text-mono"
+              data-testid="field-static-address"
+              :error-messages="fieldErrors('network_config')"
+              hint="IP address with prefix length."
+              label="IP address / CIDR"
+              persistent-hint
+              placeholder="192.168.1.50/24"
+              prepend-inner-icon="mdi-ip"
+              variant="outlined"
+            />
+            <v-text-field
+              v-model="form.staticGateway"
+              class="mb-2 text-mono"
+              data-testid="field-static-gateway"
+              label="Gateway (optional)"
+              placeholder="192.168.1.1"
+              prepend-inner-icon="mdi-router-network"
+              variant="outlined"
+            />
+            <v-combobox
+              v-model="form.staticDns"
+              chips
+              closable-chips
+              data-testid="field-static-dns"
+              hint="DNS servers. Press Enter to add each one."
+              label="DNS servers (optional)"
+              multiple
+              persistent-hint
+              prepend-inner-icon="mdi-dns"
+              variant="outlined"
+            />
+          </div>
+          <v-textarea
+            v-else-if="form.networkMode === 'advanced'"
+            v-model="form.networkConfig"
+            class="mt-2 text-mono"
+            data-testid="field-network"
+            :error-messages="fieldErrors('network_config')"
+            hint="Netplan-shaped JSON served under autoinstall.network."
+            label="Netplan configuration (JSON)"
+            persistent-hint
+            placeholder='{ "version": 2, "ethernets": { "any": { "match": {}, "dhcp4": true } } }'
+            rows="4"
+            variant="outlined"
+          />
+
+          <!-- 6. Software -->
           <div class="section-label mt-6">
             <v-icon icon="mdi-package-variant-closed" size="18" />
             <span>Packages</span>
@@ -461,31 +710,18 @@ defineExpose({ form, submit, localErrors })
             </v-chip>
           </div>
 
-          <!-- 5. Advanced (collapsed) -->
+          <!-- 7. Advanced (collapsed) -->
           <v-expansion-panels v-model="advancedOpen" class="mt-6" multiple variant="accordion">
             <v-expansion-panel elevation="0">
               <v-expansion-panel-title>
                 <v-icon class="mr-2" icon="mdi-cog-outline" size="18" />
                 Advanced options
                 <span class="text-caption text-medium-emphasis ml-2">
-                  network, late commands, kernel cmdline, raw template
+                  late commands, kernel cmdline, raw template
                 </span>
               </v-expansion-panel-title>
               <v-expansion-panel-text>
-                <v-textarea
-                  v-model="form.networkConfig"
-                  class="mb-3 text-mono"
-                  data-testid="field-network"
-                  :error-messages="fieldErrors('network_config')"
-                  hint="Netplan-shaped JSON. Leave empty to use DHCP on all interfaces."
-                  label="Network configuration (optional)"
-                  persistent-hint
-                  placeholder='{ "version": 2, "ethernets": { "any": { "match": {}, "dhcp4": true } } }'
-                  rows="3"
-                  variant="outlined"
-                />
-
-                <div class="mb-1 mt-2 text-body-2 text-medium-emphasis">
+                <div class="mb-1 text-body-2 text-medium-emphasis">
                   Late commands — run in the installed system at the end of install
                 </div>
                 <div
@@ -589,14 +825,14 @@ defineExpose({ form, submit, localErrors })
   height: auto;
 }
 
-.storage-card {
+.choice-card {
   cursor: pointer;
   transition:
     border-color 0.15s ease,
     background-color 0.15s ease;
 }
 
-.storage-card--active {
+.choice-card--active {
   border-color: rgb(var(--v-theme-primary)) !important;
   background-color: rgba(var(--v-theme-primary), 0.06);
 }

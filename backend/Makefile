@@ -25,9 +25,14 @@ migrate:
 	go run ./cmd/netbootd migrate -conf configs/netbootd.example.yaml
 
 .PHONY: test
+# Coverage is collected via GOCOVERDIR so counts merge correctly across every
+# test binary (the older -coverprofile merge under-counts code exercised by a
+# different package's tests, e.g. service methods hit only by integration).
 test:
-	go test -race -timeout 900s -coverpkg=./internal/... \
-	  -coverprofile=coverage.out -covermode=atomic ./internal/... ./tests/integration/...
+	rm -rf .coverdata && mkdir -p .coverdata
+	go test -race -timeout 900s -covermode=atomic -coverpkg=./internal/... \
+	  ./internal/... ./tests/integration/... -args -test.gocoverdir=$(PWD)/.coverdata
+	@go tool covdata textfmt -i=.coverdata -o=coverage.out >/dev/null
 	@$(MAKE) --no-print-directory coverage-check
 
 .PHONY: test-unit

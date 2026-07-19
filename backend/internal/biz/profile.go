@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"time"
 )
 
@@ -27,6 +28,10 @@ type Profile struct {
 	Name               string
 	Version            int
 	UbuntuRelease      UbuntuRelease
+	KeyboardLayout     string // e.g. "us", "gb", "de"
+	KeyboardVariant    string // optional, e.g. "dvorak"
+	Locale             string // e.g. "en_US.UTF-8"
+	Timezone           string // optional IANA tz, e.g. "Europe/Sofia"
 	StorageLayout      StorageLayout
 	NetworkConfig      map[string]any
 	Packages           []string
@@ -77,6 +82,10 @@ func NewProfileUsecase(repo ProfileRepo, validator AutoinstallValidator, log *sl
 type ProfileInput struct {
 	Name               string
 	UbuntuRelease      UbuntuRelease
+	KeyboardLayout     string
+	KeyboardVariant    string
+	Locale             string
+	Timezone           string
 	StorageLayout      StorageLayout
 	NetworkConfig      map[string]any
 	Packages           []string
@@ -86,7 +95,21 @@ type ProfileInput struct {
 	KernelCmdlineExtra string
 }
 
+var keyboardLayoutRe = regexp.MustCompile(`^[a-z]{2,}$`)
+
+// applyDefaults fills in the system settings that have safe defaults so the
+// UI (and API clients) can omit them.
+func (in *ProfileInput) applyDefaults() {
+	if in.KeyboardLayout == "" {
+		in.KeyboardLayout = "us"
+	}
+	if in.Locale == "" {
+		in.Locale = "en_US.UTF-8"
+	}
+}
+
 func (in *ProfileInput) validate() error {
+	in.applyDefaults()
 	fields := map[string]string{}
 	if in.Name == "" {
 		fields["name"] = "name is required"
@@ -95,6 +118,9 @@ func (in *ProfileInput) validate() error {
 	case ReleaseJammy, ReleaseNoble:
 	default:
 		fields["ubuntu_release"] = "must be jammy or noble"
+	}
+	if !keyboardLayoutRe.MatchString(in.KeyboardLayout) {
+		fields["keyboard_layout"] = "must be a keyboard layout code such as us, gb or de"
 	}
 	switch in.StorageLayout.Mode {
 	case "lvm", "direct", "custom":
@@ -123,7 +149,10 @@ func (in *ProfileInput) validate() error {
 
 func (in *ProfileInput) toProfile() *Profile {
 	return &Profile{
-		Name: in.Name, UbuntuRelease: in.UbuntuRelease, StorageLayout: in.StorageLayout,
+		Name: in.Name, UbuntuRelease: in.UbuntuRelease,
+		KeyboardLayout: in.KeyboardLayout, KeyboardVariant: in.KeyboardVariant,
+		Locale: in.Locale, Timezone: in.Timezone,
+		StorageLayout: in.StorageLayout,
 		NetworkConfig: in.NetworkConfig, Packages: in.Packages,
 		SSHAuthorizedKeys: in.SSHAuthorizedKeys, UserDataTemplate: in.UserDataTemplate,
 		LateCommands: in.LateCommands, KernelCmdlineExtra: in.KernelCmdlineExtra,

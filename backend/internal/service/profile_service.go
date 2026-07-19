@@ -44,7 +44,9 @@ func toProfileReply(p *biz.Profile) *v1.Profile {
 		Packages: p.Packages, SshAuthorizedKeys: p.SSHAuthorizedKeys,
 		UserDataTemplate: p.UserDataTemplate, LateCommands: p.LateCommands,
 		KernelCmdlineExtra: p.KernelCmdlineExtra,
-		CreatedAt:          timestamppb.New(p.CreatedAt), UpdatedAt: timestamppb.New(p.UpdatedAt),
+		KeyboardLayout:     p.KeyboardLayout, KeyboardVariant: p.KeyboardVariant,
+		Locale: p.Locale, Timezone: p.Timezone,
+		CreatedAt: timestamppb.New(p.CreatedAt), UpdatedAt: timestamppb.New(p.UpdatedAt),
 		AssignedMachines: p.AssignedMachines,
 	}
 }
@@ -56,6 +58,8 @@ func parseInput(in *v1.ProfileInput) (biz.ProfileInput, error) {
 		Packages: in.GetPackages(), SSHAuthorizedKeys: in.GetSshAuthorizedKeys(),
 		UserDataTemplate: in.GetUserDataTemplate(), LateCommands: in.GetLateCommands(),
 		KernelCmdlineExtra: in.GetKernelCmdlineExtra(),
+		KeyboardLayout:     in.GetKeyboardLayout(), KeyboardVariant: in.GetKeyboardVariant(),
+		Locale: in.GetLocale(), Timezone: in.GetTimezone(),
 	}
 	if s := in.GetStorageLayout(); s != "" {
 		if err := json.Unmarshal([]byte(s), &out.StorageLayout); err != nil {

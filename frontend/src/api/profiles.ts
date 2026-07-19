@@ -30,6 +30,10 @@ export interface ProfileListPage {
 export interface ProfileInput {
   readonly name: string
   readonly ubuntu_release: UbuntuRelease
+  readonly keyboard_layout: string
+  readonly keyboard_variant: string
+  readonly locale: string
+  readonly timezone: string
   readonly storage_layout: string
   readonly network_config: string
   readonly packages: readonly string[]
@@ -50,6 +54,10 @@ interface WireProfile {
   readonly name: string
   readonly version?: number | string
   readonly ubuntu_release: UbuntuRelease
+  readonly keyboard_layout?: string
+  readonly keyboard_variant?: string
+  readonly locale?: string
+  readonly timezone?: string
   readonly storage_layout?: string
   readonly network_config?: string
   readonly packages?: readonly string[]
@@ -77,9 +85,7 @@ function parseJsonObject(value: string | undefined): Record<string, unknown> {
   if (!value || !value.trim()) return {}
   try {
     const parsed: unknown = JSON.parse(value)
-    return typeof parsed === 'object' && parsed !== null
-      ? (parsed as Record<string, unknown>)
-      : {}
+    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {}
   } catch {
     return {}
   }
@@ -101,6 +107,10 @@ function normalizeProfile(wire: WireProfile): Profile {
     name: wire.name,
     version: Number(wire.version ?? 1),
     ubuntu_release: wire.ubuntu_release,
+    keyboard_layout: wire.keyboard_layout ?? 'us',
+    keyboard_variant: wire.keyboard_variant ?? '',
+    locale: wire.locale ?? 'en_US.UTF-8',
+    timezone: wire.timezone ?? '',
     storage_layout: parseStorageLayout(wire.storage_layout),
     network_config: parseJsonObject(wire.network_config),
     packages: wire.packages ?? [],

@@ -106,8 +106,22 @@ func renderDefault(in Input) (string, error) {
 	report := in.reportURL()
 	lateCommands = append(lateCommands, "wget -qO- --post-data=status=ok "+report)
 
+	layout := in.Profile.KeyboardLayout
+	if layout == "" {
+		layout = "us"
+	}
+	locale := in.Profile.Locale
+	if locale == "" {
+		locale = "en_US.UTF-8"
+	}
+
 	ai := map[string]any{
 		"version": autoinstallVer,
+		"locale":  locale,
+		"keyboard": map[string]any{
+			"layout":  layout,
+			"variant": in.Profile.KeyboardVariant,
+		},
 		"identity": map[string]any{
 			"hostname": in.Machine.Name,
 			"username": identityUsername,
@@ -121,6 +135,9 @@ func renderDefault(in Input) (string, error) {
 		"storage":        storage,
 		"late-commands":  lateCommands,
 		"error-commands": []string{"wget -qO- --post-data=status=error " + report},
+	}
+	if in.Profile.Timezone != "" {
+		ai["timezone"] = in.Profile.Timezone
 	}
 	if len(in.Profile.Packages) > 0 {
 		ai["packages"] = in.Profile.Packages

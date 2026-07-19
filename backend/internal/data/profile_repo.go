@@ -22,7 +22,8 @@ func NewProfileRepo(d *Data) *ProfileRepo { return &ProfileRepo{data: d} }
 
 const profileCols = `p.id, p.name, p.version, p.ubuntu_release, p.storage_layout,
 	p.network_config, p.packages, p.ssh_authorized_keys, coalesce(p.user_data_template,''),
-	p.late_commands, p.kernel_cmdline_extra, p.created_at, p.updated_at,
+	p.late_commands, p.kernel_cmdline_extra, p.keyboard_layout, p.keyboard_variant,
+	p.locale, p.timezone, p.created_at, p.updated_at,
 	(SELECT count(*) FROM machines m WHERE m.profile_id = p.id)`
 
 func scanProfile(row pgx.Row) (*biz.Profile, error) {
@@ -30,7 +31,8 @@ func scanProfile(row pgx.Row) (*biz.Profile, error) {
 	var storage, network []byte
 	err := row.Scan(&p.ID, &p.Name, &p.Version, &p.UbuntuRelease, &storage,
 		&network, &p.Packages, &p.SSHAuthorizedKeys, &p.UserDataTemplate,
-		&p.LateCommands, &p.KernelCmdlineExtra, &p.CreatedAt, &p.UpdatedAt,
+		&p.LateCommands, &p.KernelCmdlineExtra, &p.KeyboardLayout, &p.KeyboardVariant,
+		&p.Locale, &p.Timezone, &p.CreatedAt, &p.UpdatedAt,
 		&p.AssignedMachines)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, biz.ErrEntityNotFound
@@ -89,12 +91,14 @@ func (r *ProfileRepo) Create(ctx context.Context, p *biz.Profile) (*biz.Profile,
 	}
 	created, err := scanProfile(r.data.Pool.QueryRow(ctx,
 		`INSERT INTO profiles (name, ubuntu_release, storage_layout, network_config,
-		   packages, ssh_authorized_keys, user_data_template, late_commands, kernel_cmdline_extra)
-		 VALUES ($1, $2::ubuntu_release, $3, $4, $5, $6, NULLIF($7,''), $8, $9)
+		   packages, ssh_authorized_keys, user_data_template, late_commands, kernel_cmdline_extra,
+		   keyboard_layout, keyboard_variant, locale, timezone)
+		 VALUES ($1, $2::ubuntu_release, $3, $4, $5, $6, NULLIF($7,''), $8, $9, $10, $11, $12, $13)
 		 RETURNING `+profileColsSelf,
 		p.Name, string(p.UbuntuRelease), storage, network, orEmptySlice(p.Packages),
 		p.SSHAuthorizedKeys, p.UserDataTemplate, orEmptySlice(p.LateCommands),
-		p.KernelCmdlineExtra))
+		p.KernelCmdlineExtra, defaultStr(p.KeyboardLayout, "us"), p.KeyboardVariant,
+		defaultStr(p.Locale, "en_US.UTF-8"), p.Timezone))
 	if err != nil {
 		return nil, wrapConstraint(err, map[string]string{
 			"profiles_name_key": "profile name already in use",
@@ -130,11 +134,15 @@ func (r *ProfileRepo) Update(ctx context.Context, p *biz.Profile) (*biz.Profile,
 		`UPDATE profiles SET version = $2, ubuntu_release = $3::ubuntu_release,
 		   storage_layout = $4, network_config = $5, packages = $6,
 		   ssh_authorized_keys = $7, user_data_template = NULLIF($8,''),
-		   late_commands = $9, kernel_cmdline_extra = $10, updated_at = now()
+		   late_commands = $9, kernel_cmdline_extra = $10,
+		   keyboard_layout = $11, keyboard_variant = $12, locale = $13, timezone = $14,
+		   updated_at = now()
 		 WHERE id = $1 RETURNING `+profileColsSelf,
 		p.ID, p.Version, string(p.UbuntuRelease), storage, network,
 		orEmptySlice(p.Packages), p.SSHAuthorizedKeys, p.UserDataTemplate,
-		orEmptySlice(p.LateCommands), p.KernelCmdlineExtra))
+		orEmptySlice(p.LateCommands), p.KernelCmdlineExtra,
+		defaultStr(p.KeyboardLayout, "us"), p.KeyboardVariant,
+		defaultStr(p.Locale, "en_US.UTF-8"), p.Timezone))
 	if err != nil {
 		return nil, wrapConstraint(err, map[string]string{
 			"profiles_name_key": "profile name already in use"})
@@ -164,7 +172,16 @@ func (r *ProfileRepo) Delete(ctx context.Context, id string) error {
 // profileColsSelf is profileCols without the table alias, for RETURNING.
 const profileColsSelf = `id, name, version, ubuntu_release, storage_layout,
 	network_config, packages, ssh_authorized_keys, coalesce(user_data_template,''),
-	late_commands, kernel_cmdline_extra, created_at, updated_at, 0::bigint`
+	late_commands, kernel_cmdline_extra, keyboard_layout, keyboard_variant,
+	locale, timezone, created_at, updated_at, 0::bigint`
+
+// defaultStr returns fallback when s is empty.
+func defaultStr(s, fallback string) string {
+	if s == "" {
+		return fallback
+	}
+	return s
+}
 
 func orEmptyMap(m map[string]any) map[string]any {
 	if m == nil {

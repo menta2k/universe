@@ -25,6 +25,10 @@ const wireProfile = {
 const input: ProfileInput = {
   name: 'ubuntu-server',
   ubuntu_release: 'noble',
+  keyboard_layout: 'us',
+  keyboard_variant: '',
+  locale: '',
+  timezone: '',
   storage_layout: '{"mode":"lvm"}',
   network_config: '',
   packages: ['vim'],
@@ -83,7 +87,10 @@ describe('stores/profiles', () => {
 
   it('fetchProfiles surfaces server errors and clears the list', async () => {
     fetchMock.mockResolvedValueOnce(
-      jsonResponse({ success: false, data: null, error: { reason: 'INTERNAL', message: 'boom' } }, 500),
+      jsonResponse(
+        { success: false, data: null, error: { reason: 'INTERNAL', message: 'boom' } },
+        500,
+      ),
     )
 
     const store = useProfilesStore()

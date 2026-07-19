@@ -19,6 +19,9 @@ func defaultInput() Input {
 			Name:              "base",
 			Version:           3,
 			StorageLayout:     biz.StorageLayout{Mode: "lvm"},
+			KeyboardLayout:    "gb",
+			Locale:            "en_GB.UTF-8",
+			Timezone:          "Europe/London",
 			Packages:          []string{"curl", "openssh-server"},
 			SSHAuthorizedKeys: []string{"ssh-ed25519 AAAA key1", "ssh-rsa BBBB key2"},
 			LateCommands:      []string{"systemctl enable foo", "touch /done"},
@@ -104,6 +107,17 @@ func TestRenderDefaultHappyPath(t *testing.T) {
 
 	if _, present := ai["network"]; present {
 		t.Errorf("network should be omitted when profile.NetworkConfig is empty")
+	}
+
+	if ai["locale"] != "en_GB.UTF-8" {
+		t.Errorf("locale = %v, want en_GB.UTF-8", ai["locale"])
+	}
+	if ai["timezone"] != "Europe/London" {
+		t.Errorf("timezone = %v, want Europe/London", ai["timezone"])
+	}
+	keyboard, _ := ai["keyboard"].(map[string]any)
+	if keyboard == nil || keyboard["layout"] != "gb" {
+		t.Errorf("keyboard = %v, want {layout: gb}", ai["keyboard"])
 	}
 
 	wantLate := []any{

@@ -47,6 +47,10 @@ export interface Profile {
   readonly name: string
   readonly version: number
   readonly ubuntu_release: UbuntuRelease
+  readonly keyboard_layout: string
+  readonly keyboard_variant: string
+  readonly locale: string
+  readonly timezone: string
   readonly storage_layout: StorageLayout
   readonly network_config: Record<string, unknown>
   readonly packages: readonly string[]

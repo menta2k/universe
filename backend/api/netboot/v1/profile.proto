@@ -60,6 +60,10 @@ message Profile {
   google.protobuf.Timestamp created_at = 12;
   google.protobuf.Timestamp updated_at = 13;
   int64 assigned_machines = 14;
+  string keyboard_layout = 15;  // e.g. us, gb, de
+  string keyboard_variant = 16; // optional
+  string locale = 17;           // e.g. en_US.UTF-8
+  string timezone = 18;         // optional IANA tz
 }
 
 message ProfileInput {
@@ -72,6 +76,10 @@ message ProfileInput {
   string user_data_template = 7;
   repeated string late_commands = 8;
   string kernel_cmdline_extra = 9;
+  string keyboard_layout = 10;
+  string keyboard_variant = 11;
+  string locale = 12;
+  string timezone = 13;
 }
 
 message GetProfileRequest {

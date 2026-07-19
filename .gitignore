@@ -1,6 +1,7 @@
 # Go
 backend/bin/
 backend/coverage.out
+backend/.coverdata/
 *.test
 *.out
 
@@ -30,3 +31,4 @@ Thumbs.db
 
 # E2E scratch
 backend/tests/e2e/.work/
+.coverdata/
