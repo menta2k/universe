@@ -16,7 +16,7 @@ import (
 
 	pintftp "github.com/pin/tftp/v3"
 
-	"universe/backend/internal/netboot"
+	"github.com/menta2k/universe/backend/internal/netboot"
 )
 
 // filenamePattern is the allowlist for requested filenames: a single path

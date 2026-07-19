@@ -7,7 +7,7 @@ import (
 
 	"github.com/insomniacslk/dhcp/dhcpv4"
 
-	"universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/biz"
 )
 
 // captureEvents records every event handed to Record for assertions.

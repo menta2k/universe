@@ -6,8 +6,8 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	v1 "universe/backend/api/netboot/v1"
-	"universe/backend/internal/biz"
+	v1 "github.com/menta2k/universe/backend/api/netboot/v1"
+	"github.com/menta2k/universe/backend/internal/biz"
 )
 
 type DhcpService struct {

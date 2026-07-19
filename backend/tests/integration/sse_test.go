@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"universe/backend/internal/biz"
-	"universe/backend/internal/data"
-	"universe/backend/internal/server"
-	"universe/backend/tests/integration/testenv"
+	"github.com/menta2k/universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/data"
+	"github.com/menta2k/universe/backend/internal/server"
+	"github.com/menta2k/universe/backend/tests/integration/testenv"
 )
 
 // TestSSEDeliversFilteredEvents verifies the SSE endpoint streams published

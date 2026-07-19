@@ -14,7 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/biz"
 )
 
 var artifactNameRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)

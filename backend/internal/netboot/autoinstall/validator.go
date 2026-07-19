@@ -1,7 +1,7 @@
 package autoinstall
 
 import (
-	"universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/biz"
 )
 
 // Validator implements biz.AutoinstallValidator by rendering a profile against

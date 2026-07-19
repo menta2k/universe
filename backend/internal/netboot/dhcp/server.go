@@ -9,7 +9,7 @@ import (
 	"github.com/insomniacslk/dhcp/dhcpv4"
 	"github.com/insomniacslk/dhcp/dhcpv4/server4"
 
-	"universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/biz"
 )
 
 // BootDecider resolves a booting MAC to its armed session (biz.MachineUsecase).

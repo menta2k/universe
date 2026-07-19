@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/biz"
 )
 
 // SessionQueryRepo reads sessions + timelines for the UI (biz.SessionQueryRepo).

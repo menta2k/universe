@@ -9,9 +9,9 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	v1 "universe/backend/api/netboot/v1"
-	"universe/backend/internal/biz"
-	"universe/backend/internal/server"
+	v1 "github.com/menta2k/universe/backend/api/netboot/v1"
+	"github.com/menta2k/universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/server"
 )
 
 // ArtifactService serves the proto RPCs (list/get/delete/transfers) and the

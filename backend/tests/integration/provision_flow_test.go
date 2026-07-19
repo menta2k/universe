@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"universe/backend/tests/integration/testenv"
+	"github.com/menta2k/universe/backend/tests/integration/testenv"
 )
 
 // TestProvisionFlowOverHTTP drives profile + machine + provision + cancel over

@@ -18,8 +18,8 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 	"github.com/valkey-io/valkey-go"
 
-	"universe/backend/internal/conf"
-	"universe/backend/internal/data"
+	"github.com/menta2k/universe/backend/internal/conf"
+	"github.com/menta2k/universe/backend/internal/data"
 )
 
 // Env holds connection details for one test's isolated database.

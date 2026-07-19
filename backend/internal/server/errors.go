@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
-	v1 "universe/backend/api/netboot/v1"
+	v1 "github.com/menta2k/universe/backend/api/netboot/v1"
 )
 
 func reason(r v1.ErrorReason) string { return v1.ErrorReason_name[int32(r)] }

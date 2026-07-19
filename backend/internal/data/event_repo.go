@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/biz"
 )
 
 // EventsChannel is the Valkey pub/sub channel carrying live events for SSE.

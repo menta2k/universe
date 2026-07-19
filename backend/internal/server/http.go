@@ -7,9 +7,9 @@ import (
 	khttp "github.com/go-kratos/kratos/v2/transport/http"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"universe/backend/internal/biz"
-	"universe/backend/internal/conf"
-	"universe/backend/internal/webui"
+	"github.com/menta2k/universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/conf"
+	"github.com/menta2k/universe/backend/internal/webui"
 )
 
 // loginAttemptsPerMinute bounds authentication attempts per client.

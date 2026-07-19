@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package netboot.v1;
 
-option go_package = "universe/backend/api/netboot/v1;netbootv1";
+option go_package = "github.com/menta2k/universe/backend/api/netboot/v1;netbootv1";
 
 // ErrorReason values map to HTTP status codes in internal/server/errors.go:
 // VALIDATION_FAILED=422, NOT_FOUND=404, CONFLICT=409, UNAUTHENTICATED=401,

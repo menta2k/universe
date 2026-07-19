@@ -7,8 +7,8 @@ import (
 
 	kerrors "github.com/go-kratos/kratos/v2/errors"
 
-	v1 "universe/backend/api/netboot/v1"
-	"universe/backend/internal/biz"
+	v1 "github.com/menta2k/universe/backend/api/netboot/v1"
+	"github.com/menta2k/universe/backend/internal/biz"
 )
 
 // TestMapErr asserts each biz/domain error maps to the expected kratos

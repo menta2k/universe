@@ -7,7 +7,7 @@ import (
 
 	"github.com/valkey-io/valkey-go"
 
-	"universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/biz"
 )
 
 // LeaseRepo reads active leases from Valkey (biz.LeaseReader).

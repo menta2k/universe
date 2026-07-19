@@ -8,9 +8,9 @@ import (
 	khttp "github.com/go-kratos/kratos/v2/transport/http"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	v1 "universe/backend/api/netboot/v1"
-	"universe/backend/internal/biz"
-	"universe/backend/internal/server"
+	v1 "github.com/menta2k/universe/backend/api/netboot/v1"
+	"github.com/menta2k/universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/server"
 )
 
 // SessionCookie is the browser session cookie name.

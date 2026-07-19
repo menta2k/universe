@@ -1,4 +1,4 @@
-module universe/backend
+module github.com/menta2k/universe/backend
 
 go 1.25.0
 

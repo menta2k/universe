@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"universe/backend/internal/biz"
-	"universe/backend/internal/data"
-	"universe/backend/internal/netboot/bootsrv"
-	"universe/backend/tests/integration/testenv"
+	"github.com/menta2k/universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/data"
+	"github.com/menta2k/universe/backend/internal/netboot/bootsrv"
+	"github.com/menta2k/universe/backend/tests/integration/testenv"
 )
 
 // seedProfile inserts a profile directly and returns its id.

@@ -9,7 +9,7 @@ import (
 
 	"github.com/valkey-io/valkey-go"
 
-	"universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/biz"
 )
 
 // Controller owns the lifecycle of the authoritative DHCP server. The server

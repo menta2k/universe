@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/biz"
 )
 
 // DhcpConfigRepo is the pgx implementation of biz.DhcpConfigRepo.

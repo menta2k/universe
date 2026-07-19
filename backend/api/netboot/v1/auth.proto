@@ -5,7 +5,7 @@ package netboot.v1;
 import "google/api/annotations.proto";
 import "google/protobuf/empty.proto";
 
-option go_package = "universe/backend/api/netboot/v1;netbootv1";
+option go_package = "github.com/menta2k/universe/backend/api/netboot/v1;netbootv1";
 
 service AuthService {
   rpc Login(LoginRequest) returns (Operator) {

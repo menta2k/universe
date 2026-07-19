@@ -6,8 +6,8 @@ import (
 	"github.com/go-kratos/kratos/v2/middleware/recovery"
 	kgrpc "github.com/go-kratos/kratos/v2/transport/grpc"
 
-	"universe/backend/internal/biz"
-	"universe/backend/internal/conf"
+	"github.com/menta2k/universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/conf"
 )
 
 // GRPCRegisterFn attaches a service to the gRPC server.

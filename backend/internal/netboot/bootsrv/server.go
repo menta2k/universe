@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"universe/backend/internal/biz"
-	"universe/backend/internal/netboot/autoinstall"
+	"github.com/menta2k/universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/netboot/autoinstall"
 )
 
 // BootUsecase resolves booting machines and finalizes installs (biz layer).

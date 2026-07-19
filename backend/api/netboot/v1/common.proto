@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package netboot.v1;
 
-option go_package = "universe/backend/api/netboot/v1;netbootv1";
+option go_package = "github.com/menta2k/universe/backend/api/netboot/v1;netbootv1";
 
 // PageRequest/PageMeta implement the pagination contract from admin-api.md.
 message PageRequest {

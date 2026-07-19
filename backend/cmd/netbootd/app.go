@@ -11,16 +11,16 @@ import (
 	khttp "github.com/go-kratos/kratos/v2/transport/http"
 	"golang.org/x/sync/errgroup"
 
-	v1 "universe/backend/api/netboot/v1"
-	"universe/backend/internal/biz"
-	"universe/backend/internal/conf"
-	"universe/backend/internal/data"
-	"universe/backend/internal/netboot/autoinstall"
-	"universe/backend/internal/netboot/bootsrv"
-	"universe/backend/internal/netboot/dhcp"
-	"universe/backend/internal/netboot/tftp"
-	"universe/backend/internal/server"
-	"universe/backend/internal/service"
+	v1 "github.com/menta2k/universe/backend/api/netboot/v1"
+	"github.com/menta2k/universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/conf"
+	"github.com/menta2k/universe/backend/internal/data"
+	"github.com/menta2k/universe/backend/internal/netboot/autoinstall"
+	"github.com/menta2k/universe/backend/internal/netboot/bootsrv"
+	"github.com/menta2k/universe/backend/internal/netboot/dhcp"
+	"github.com/menta2k/universe/backend/internal/netboot/tftp"
+	"github.com/menta2k/universe/backend/internal/server"
+	"github.com/menta2k/universe/backend/internal/service"
 )
 
 const sessionTTL = 12 * time.Hour

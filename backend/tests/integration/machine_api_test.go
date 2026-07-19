@@ -8,11 +8,11 @@ import (
 
 	kerrors "github.com/go-kratos/kratos/v2/errors"
 
-	v1 "universe/backend/api/netboot/v1"
-	"universe/backend/internal/biz"
-	"universe/backend/internal/data"
-	"universe/backend/internal/service"
-	"universe/backend/tests/integration/testenv"
+	v1 "github.com/menta2k/universe/backend/api/netboot/v1"
+	"github.com/menta2k/universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/data"
+	"github.com/menta2k/universe/backend/internal/service"
+	"github.com/menta2k/universe/backend/tests/integration/testenv"
 )
 
 type gate struct{ enabled bool }

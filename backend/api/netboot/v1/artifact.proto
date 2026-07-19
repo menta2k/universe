@@ -7,7 +7,7 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "netboot/v1/common.proto";
 
-option go_package = "universe/backend/api/netboot/v1;netbootv1";
+option go_package = "github.com/menta2k/universe/backend/api/netboot/v1;netbootv1";
 
 // Upload/Replace are handled outside proto as multipart HTTP endpoints
 // (POST /api/v1/artifacts, PUT /api/v1/artifacts/{id}); listing, metadata

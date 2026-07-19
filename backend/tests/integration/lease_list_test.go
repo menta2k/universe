@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"universe/backend/internal/biz"
-	"universe/backend/internal/data"
-	"universe/backend/internal/netboot/dhcp"
-	"universe/backend/tests/integration/testenv"
+	"github.com/menta2k/universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/data"
+	"github.com/menta2k/universe/backend/internal/netboot/dhcp"
+	"github.com/menta2k/universe/backend/tests/integration/testenv"
 )
 
 // TestLeaseRepoListsActiveLeases seeds a lease through the pool (which writes

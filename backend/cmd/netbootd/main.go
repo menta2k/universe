@@ -14,8 +14,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"universe/backend/internal/conf"
-	"universe/backend/internal/data"
+	"github.com/menta2k/universe/backend/internal/conf"
+	"github.com/menta2k/universe/backend/internal/data"
 )
 
 func main() {

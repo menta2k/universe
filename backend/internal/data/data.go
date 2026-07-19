@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/valkey-io/valkey-go"
 
-	"universe/backend/internal/conf"
+	"github.com/menta2k/universe/backend/internal/conf"
 )
 
 //go:embed migrations/*.sql

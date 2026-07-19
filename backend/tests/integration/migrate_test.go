@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"universe/backend/tests/integration/testenv"
+	"github.com/menta2k/universe/backend/tests/integration/testenv"
 )
 
 func TestMigrationsApplyAndSchemaIsUsable(t *testing.T) {

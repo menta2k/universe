@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/biz"
 )
 
 func TestBuildPoolInputs(t *testing.T) {

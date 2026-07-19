@@ -6,7 +6,7 @@ import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "netboot/v1/common.proto";
 
-option go_package = "universe/backend/api/netboot/v1;netbootv1";
+option go_package = "github.com/menta2k/universe/backend/api/netboot/v1;netbootv1";
 
 // The SSE stream (GET /api/v1/events/stream) is a plain HTTP endpoint
 // registered alongside the Kratos router; it is documented in

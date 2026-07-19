@@ -7,7 +7,7 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "netboot/v1/common.proto";
 
-option go_package = "universe/backend/api/netboot/v1;netbootv1";
+option go_package = "github.com/menta2k/universe/backend/api/netboot/v1;netbootv1";
 
 service ProfileService {
   rpc ListProfiles(PageRequest) returns (ListProfilesReply) {

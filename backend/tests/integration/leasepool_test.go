@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"universe/backend/internal/netboot/dhcp"
-	"universe/backend/tests/integration/testenv"
+	"github.com/menta2k/universe/backend/internal/netboot/dhcp"
+	"github.com/menta2k/universe/backend/tests/integration/testenv"
 )
 
 // leaseSubnets is a small pool: two usable addresses (.100 and .101).

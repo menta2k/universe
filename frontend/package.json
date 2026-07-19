@@ -1,7 +1,12 @@
 {
-  "name": "netboot-manager-frontend",
+  "name": "@menta2k/universe-frontend",
   "private": true,
   "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/menta2k/universe.git",
+    "directory": "frontend"
+  },
   "type": "module",
   "engines": {
     "node": ">=22"

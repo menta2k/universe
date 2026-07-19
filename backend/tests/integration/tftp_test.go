@@ -13,8 +13,8 @@ import (
 
 	pintftp "github.com/pin/tftp/v3"
 
-	"universe/backend/internal/netboot"
-	nbtftp "universe/backend/internal/netboot/tftp"
+	"github.com/menta2k/universe/backend/internal/netboot"
+	nbtftp "github.com/menta2k/universe/backend/internal/netboot/tftp"
 )
 
 // recordedTransfer captures one TransferLogger invocation.

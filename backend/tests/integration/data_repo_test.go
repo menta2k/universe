@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"universe/backend/internal/biz"
-	"universe/backend/internal/data"
-	"universe/backend/tests/integration/testenv"
+	"github.com/menta2k/universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/data"
+	"github.com/menta2k/universe/backend/tests/integration/testenv"
 )
 
 func TestMachineRepoDirect(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"universe/backend/internal/biz"
+	"github.com/menta2k/universe/backend/internal/biz"
 )
 
 // TransferLogger records TFTP transfers (implements tftp.TransferLogger).

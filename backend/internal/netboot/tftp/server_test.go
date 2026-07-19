@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	"universe/backend/internal/netboot"
+	"github.com/menta2k/universe/backend/internal/netboot"
 )
 
 // fakeSource is a FileSource backed by an in-memory map.
