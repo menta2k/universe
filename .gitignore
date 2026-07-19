@@ -9,6 +9,10 @@ backend/.coverdata/
 node_modules/
 frontend/dist/
 frontend/coverage/
+
+# Frontend build staged for go:embed (built by `make webui`)
+backend/internal/webui/dist/*
+!backend/internal/webui/dist/.gitkeep
 *.log
 
 # Env / secrets

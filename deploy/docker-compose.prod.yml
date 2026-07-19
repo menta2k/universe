@@ -1,0 +1,87 @@
+# Production deployment: single netbootd container (web UI + migrations
+# embedded in the binary) plus its datastores.
+#
+#   docker compose -f deploy/docker-compose.prod.yml up -d --build
+#
+# Provide a real config at deploy/netbootd.yaml (start from
+# backend/configs/netbootd.example.yaml) — secrets belong in that file or in
+# environment-specific secret storage, never in this compose file.
+
+services:
+  timescaledb:
+    image: timescale/timescaledb:2.17.2-pg16
+    environment:
+      POSTGRES_DB: netboot
+      POSTGRES_USER: netboot
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    # netbootd runs with host networking, so the datastores publish on
+    # loopback and the config DSN points at 127.0.0.1.
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - timescale-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U netboot -d netboot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  valkey:
+    image: valkey/valkey:8.0
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # One-shot: applies the migrations embedded in the binary, then exits.
+  migrate:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["migrate", "-conf", "/etc/netbootd/netbootd.yaml"]
+    # Host networking so the same config DSN (127.0.0.1) works here too.
+    network_mode: host
+    volumes:
+      - ./netbootd.yaml:/etc/netbootd/netbootd.yaml:ro
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    restart: "no"
+
+  netbootd:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    # DHCP/TFTP need broadcast traffic and privileged ports on the LAN.
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - NET_BIND_SERVICE
+    volumes:
+      - ./netbootd.yaml:/etc/netbootd/netbootd.yaml:ro
+      - artifacts:/var/lib/netbootd/artifacts
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
+
+secrets:
+  db_password:
+    file: ./secrets/db_password
+
+volumes:
+  timescale-data:
+  valkey-data:
+  artifacts:

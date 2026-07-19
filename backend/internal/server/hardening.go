@@ -17,7 +17,11 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "no-referrer")
-		h.Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'")
+		// style-src 'unsafe-inline' and img-src data: are required by the
+		// embedded Vuetify SPA (runtime-injected theme styles, inline icons).
+		h.Set("Content-Security-Policy",
+			"default-src 'self'; style-src 'self' 'unsafe-inline'; "+
+				"img-src 'self' data:; frame-ancestors 'none'")
 		next.ServeHTTP(w, r)
 	})
 }

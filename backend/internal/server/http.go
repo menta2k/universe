@@ -9,6 +9,7 @@ import (
 
 	"universe/backend/internal/biz"
 	"universe/backend/internal/conf"
+	"universe/backend/internal/webui"
 )
 
 // loginAttemptsPerMinute bounds authentication attempts per client.
@@ -43,6 +44,13 @@ func NewHTTPServer(
 	srv.HandleFunc("/healthz", healthz)
 	for _, register := range registrars {
 		register(srv)
+	}
+	// Embedded web UI: registered last so every API route wins; unmatched
+	// paths fall back to the SPA's index.html.
+	if ui, err := webui.Handler(); err != nil {
+		log.Error("embedded web ui unavailable", "err", err)
+	} else {
+		srv.HandlePrefix("/", ui)
 	}
 	log.Info("http server configured", "addr", c.Server.HTTPAddr)
 	return srv

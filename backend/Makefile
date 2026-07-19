@@ -16,6 +16,20 @@ lint:
 build:
 	mkdir -p bin && go build -o bin/netbootd ./cmd/netbootd
 
+.PHONY: webui
+# Build the Vue frontend and stage it into internal/webui/dist so go:embed
+# ships it inside the netbootd binary.
+webui:
+	cd ../frontend && npm ci && npm run build
+	find internal/webui/dist -mindepth 1 -not -name '.gitkeep' -delete
+	cp -r ../frontend/dist/. internal/webui/dist/
+
+.PHONY: build-release
+# Production build: single binary with the web UI and DB migrations embedded.
+build-release: webui
+	mkdir -p bin && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
+	  -o bin/netbootd ./cmd/netbootd
+
 .PHONY: run
 run: build
 	./bin/netbootd -conf configs/netbootd.example.yaml
