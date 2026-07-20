@@ -366,12 +366,12 @@ func TestCmdline(t *testing.T) {
 		{
 			name:  "default",
 			extra: "",
-			want:  "autoinstall ds=nocloud-net;s=http://10.0.0.1:8082/boot/seed/tok123/",
+			want:  "autoinstall ds=nocloud;s=http://10.0.0.1:8082/boot/seed/tok123/",
 		},
 		{
 			name:  "with extra",
 			extra: "console=ttyS0 quiet",
-			want:  "autoinstall ds=nocloud-net;s=http://10.0.0.1:8082/boot/seed/tok123/ console=ttyS0 quiet",
+			want:  "autoinstall ds=nocloud;s=http://10.0.0.1:8082/boot/seed/tok123/ console=ttyS0 quiet",
 		},
 		{
 			name:    "newline injection",

@@ -37,7 +37,7 @@ func TestIPXEScriptInjectsISOURLWhenServing(t *testing.T) {
 	dec := &biz.BootDecision{Profile: &biz.Profile{UbuntuRelease: biz.ReleaseNoble}}
 
 	on := &Server{externalURL: "http://boot.example:8082", serveISO: true}
-	script := on.ipxeScript(dec, "autoinstall ds=nocloud-net;s=http://x/")
+	script := on.ipxeScript(dec, "autoinstall ds=nocloud;s=http://x/")
 	// casper needs the .iso-suffixed URL, ip=dhcp, and the ramdisk root.
 	if !strings.Contains(script, "url=http://boot.example:8082/boot/iso/noble.iso") {
 		t.Errorf("expected .iso url in kernel cmdline, got:\n%s", script)
@@ -49,7 +49,7 @@ func TestIPXEScriptInjectsISOURLWhenServing(t *testing.T) {
 		t.Errorf("expected ramdisk root in cmdline, got:\n%s", script)
 	}
 	// The autoinstall datasource must still be present.
-	if !strings.Contains(script, "autoinstall ds=nocloud-net;s=http://x/") {
+	if !strings.Contains(script, "autoinstall ds=nocloud;s=http://x/") {
 		t.Errorf("autoinstall seed lost, got:\n%s", script)
 	}
 

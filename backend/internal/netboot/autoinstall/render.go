@@ -82,7 +82,11 @@ func Cmdline(in Input) (string, error) {
 	if err := in.validate(); err != nil {
 		return "", err
 	}
-	cmdline := fmt.Sprintf("autoinstall ds=nocloud-net;s=%s/boot/seed/%s/",
+	// cloud-init 24.x+ (Ubuntu 24.04 ships 25.x) removed the "nocloud-net"
+	// datasource name; use "nocloud" — the http:// seedfrom selects network
+	// mode. The old name is silently ignored, leaving DataSourceNone and an
+	// interactive installer.
+	cmdline := fmt.Sprintf("autoinstall ds=nocloud;s=%s/boot/seed/%s/",
 		strings.TrimRight(in.BootURL, "/"), in.SeedToken)
 	if extra := in.Profile.KernelCmdlineExtra; extra != "" {
 		cmdline = cmdline + " " + extra
