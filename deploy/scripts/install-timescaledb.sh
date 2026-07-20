@@ -32,6 +32,24 @@ PG_VERSION="16"
 log()  { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
 die()  { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
+# SUDO is empty when already root, "sudo" otherwise. Used for system commands
+# (apt, systemctl) in native mode.
+if [[ "$(id -u)" -eq 0 ]]; then SUDO=""; else SUDO="sudo"; fi
+
+# run_pg_super runs a command as the postgres OS user (the peer-auth superuser),
+# working whether the script runs as root or under sudo.
+run_pg_super() {
+    if [[ "$(id -u)" -eq 0 ]]; then
+        if command -v runuser >/dev/null 2>&1; then
+            runuser -u postgres -- "$@"
+        else
+            su -s /bin/sh postgres -c "$(printf '%q ' "$@")"
+        fi
+    else
+        sudo -u postgres "$@"
+    fi
+}
+
 usage() { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
 
 while [[ $# -gt 0 ]]; do
@@ -93,8 +111,6 @@ install_docker() {
 install_native() {
     [[ "$(id -u)" -eq 0 ]] || command -v sudo >/dev/null || die "needs root or sudo"
     command -v lsb_release >/dev/null || die "lsb_release not found (Ubuntu/Debian only)"
-    local SUDO=""
-    [[ "$(id -u)" -eq 0 ]] || SUDO="sudo"
     local codename; codename=$(lsb_release -cs)
 
     log "Adding PostgreSQL (PGDG) apt repository"
@@ -117,9 +133,15 @@ install_native() {
     log "Tuning postgresql.conf (timescaledb-tune)"
     $SUDO timescaledb-tune --quiet --yes >/dev/null
 
+    local conf="/etc/postgresql/${PG_VERSION}/main/postgresql.conf"
+    local hba="/etc/postgresql/${PG_VERSION}/main/pg_hba.conf"
+
+    if [[ "$DB_PORT" != "5432" ]]; then
+        log "Setting listen port to $DB_PORT"
+        $SUDO sed -i "s/^#\?port\s*=.*/port = ${DB_PORT}/" "$conf"
+    fi
+
     if [[ -n "$CLIENT_SUBNET" ]]; then
-        local hba="/etc/postgresql/${PG_VERSION}/main/pg_hba.conf"
-        local conf="/etc/postgresql/${PG_VERSION}/main/postgresql.conf"
         log "Allowing $DB_USER@$CLIENT_SUBNET in pg_hba.conf and listening on all addresses"
         if ! $SUDO grep -q "host  ${DB_NAME}  ${DB_USER}  ${CLIENT_SUBNET}" "$hba"; then
             echo "host  ${DB_NAME}  ${DB_USER}  ${CLIENT_SUBNET}  scram-sha-256" | $SUDO tee -a "$hba" >/dev/null
@@ -129,10 +151,10 @@ install_native() {
 
     log "Restarting PostgreSQL"
     $SUDO systemctl restart postgresql
-    wait_for_db $SUDO -u postgres pg_isready
+    wait_for_db run_pg_super pg_isready -p "$DB_PORT"
 
     log "Creating role '$DB_USER' and database '$DB_NAME'"
-    $SUDO -u postgres psql -v ON_ERROR_STOP=1 \
+    run_pg_super psql -p "$DB_PORT" -v ON_ERROR_STOP=1 \
         -v user="$DB_USER" -v pass="$DB_PASSWORD" -v db="$DB_NAME" <<'SQL' >/dev/null
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'user', :'pass')
 WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'user') \gexec
@@ -141,7 +163,7 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'db') \gexec
 SQL
     # Pre-create the extension as superuser so netbootd's migration needs no
     # elevated privileges.
-    $SUDO -u postgres psql -d "$DB_NAME" \
+    run_pg_super psql -p "$DB_PORT" -d "$DB_NAME" \
         -c "CREATE EXTENSION IF NOT EXISTS timescaledb;" >/dev/null
 }
 
