@@ -38,11 +38,19 @@ func TestIPXEScriptInjectsISOURLWhenServing(t *testing.T) {
 
 	on := &Server{externalURL: "http://boot.example:8082", serveISO: true}
 	script := on.ipxeScript(dec, "autoinstall ds=nocloud-net;s=http://x/")
-	if !strings.Contains(script, "url=http://boot.example:8082/boot/iso/noble") {
-		t.Errorf("expected iso url in kernel cmdline, got:\n%s", script)
+	// casper needs the .iso-suffixed URL, ip=dhcp, and the ramdisk root.
+	if !strings.Contains(script, "url=http://boot.example:8082/boot/iso/noble.iso") {
+		t.Errorf("expected .iso url in kernel cmdline, got:\n%s", script)
 	}
 	if !strings.Contains(script, "ip=dhcp") {
 		t.Errorf("expected ip=dhcp in cmdline, got:\n%s", script)
+	}
+	if !strings.Contains(script, "root=/dev/ram0 ramdisk_size=1500000") {
+		t.Errorf("expected ramdisk root in cmdline, got:\n%s", script)
+	}
+	// The autoinstall datasource must still be present.
+	if !strings.Contains(script, "autoinstall ds=nocloud-net;s=http://x/") {
+		t.Errorf("autoinstall seed lost, got:\n%s", script)
 	}
 
 	off := &Server{externalURL: "http://boot.example:8082", serveISO: false}
@@ -67,7 +75,7 @@ func TestHandleISOServesFileWithRanges(t *testing.T) {
 	defer ts.Close()
 
 	// Full fetch.
-	resp, err := http.Get(ts.URL + "/boot/iso/noble")
+	resp, err := http.Get(ts.URL + "/boot/iso/noble.iso")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +86,7 @@ func TestHandleISOServesFileWithRanges(t *testing.T) {
 	}
 
 	// Range fetch (casper uses these).
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/boot/iso/noble", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/boot/iso/noble.iso", nil)
 	req.Header.Set("Range", "bytes=0-3")
 	rr, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -98,7 +106,7 @@ func TestHandleISOMissingIs404(t *testing.T) {
 	srv := &Server{artifacts: fakeArtifacts{byName: map[string]*biz.Artifact{}}}
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
-	resp, err := http.Get(ts.URL + "/boot/iso/noble")
+	resp, err := http.Get(ts.URL + "/boot/iso/noble.iso")
 	if err != nil {
 		t.Fatal(err)
 	}

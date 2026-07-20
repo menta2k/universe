@@ -26,9 +26,6 @@ type ArtifactSource interface {
 	Open(ctx context.Context, a *biz.Artifact) (io.ReadCloser, error)
 }
 
-// isoFilename is the stored filename for a release's install ISO.
-func isoFilename(release string) string { return release + ".iso" }
-
 // CredentialMinter creates a one-time password hash per session (FR-018).
 type CredentialMinter interface {
 	MintOneTime() (hash string, err error)
@@ -65,7 +62,7 @@ func NewServer(
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /boot/ipxe/{mac}", s.handleIPXE)
-	mux.HandleFunc("GET /boot/iso/{release}", s.handleISO)
+	mux.HandleFunc("GET /boot/iso/{file}", s.handleISO)
 	mux.HandleFunc("GET /boot/file/{release}/{kind}", s.handleFile)
 	mux.HandleFunc("GET /boot/seed/{token}/user-data", s.handleUserData)
 	mux.HandleFunc("GET /boot/seed/{token}/meta-data", s.handleMetaData)
@@ -137,11 +134,16 @@ func (s *Server) handleIPXE(w http.ResponseWriter, r *http.Request) {
 func (s *Server) ipxeScript(dec *biz.BootDecision, cmdline string) string {
 	base := s.externalURL
 	rel := string(dec.Profile.UbuntuRelease)
-	// When serving the ISO, point casper at it over HTTP so it can mount the
-	// live filesystem (otherwise it looks for install media and fails with
-	// "no medium found"). ip=dhcp brings networking up before the fetch.
+	// When serving the ISO, prepend the parameters casper needs to download and
+	// loop-mount the live filesystem over HTTP (per Ubuntu's netboot docs):
+	//   root=/dev/ram0 ramdisk_size=... engages the ramdisk boot,
+	//   ip=dhcp brings networking up, and url=<...>.iso must end in .iso so
+	//   casper recognises it as a fetchable image. Without these it ignores the
+	//   network source and fails with "no medium found".
 	if s.serveISO {
-		cmdline = fmt.Sprintf("%s ip=dhcp url=%s/boot/iso/%s", cmdline, base, rel)
+		cmdline = fmt.Sprintf(
+			"root=/dev/ram0 ramdisk_size=1500000 ip=dhcp url=%s/boot/iso/%s.iso %s",
+			base, rel, cmdline)
 	}
 	var b strings.Builder
 	b.WriteString("#!ipxe\n")
@@ -155,8 +157,9 @@ func (s *Server) ipxeScript(dec *biz.BootDecision, cmdline string) string {
 // can fetch its root filesystem. The daemon must have the ISO stored (uploaded
 // or auto-fetched); missing ISO is a 404.
 func (s *Server) handleISO(w http.ResponseWriter, r *http.Request) {
-	release := r.PathValue("release")
-	art, err := s.artifacts.GetByFilename(r.Context(), isoFilename(release))
+	// The URL ends in "<release>.iso" so casper recognises it; that is exactly
+	// the stored artifact filename, so look it up directly.
+	art, err := s.artifacts.GetByFilename(r.Context(), r.PathValue("file"))
 	if err != nil {
 		http.Error(w, "iso not found", http.StatusNotFound)
 		return
