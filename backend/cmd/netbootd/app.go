@@ -15,6 +15,7 @@ import (
 	"github.com/menta2k/universe/backend/internal/biz"
 	"github.com/menta2k/universe/backend/internal/conf"
 	"github.com/menta2k/universe/backend/internal/data"
+	"github.com/menta2k/universe/backend/internal/netboot"
 	"github.com/menta2k/universe/backend/internal/netboot/autoinstall"
 	"github.com/menta2k/universe/backend/internal/netboot/bootsrv"
 	"github.com/menta2k/universe/backend/internal/netboot/dhcp"
@@ -149,7 +150,11 @@ func (a *app) start(ctx context.Context, g *errgroup.Group) {
 	startKratos(ctx, g, a.log, "grpc", a.grpcSrv)
 
 	g.Go(func() error {
-		if err := a.tftpSrv.ListenAndServe(a.cfg.Netboot.TFTPAddr); err != nil {
+		addr, err := netboot.BindAddr(a.cfg.Netboot.TFTPInterface, a.cfg.Netboot.TFTPAddr)
+		if err != nil {
+			return fmt.Errorf("tftp: %w", err)
+		}
+		if err := a.tftpSrv.ListenAndServe(addr); err != nil {
 			return fmt.Errorf("tftp: %w", err)
 		}
 		return nil
@@ -161,7 +166,11 @@ func (a *app) start(ctx context.Context, g *errgroup.Group) {
 	})
 
 	g.Go(func() error {
-		if err := a.bootSrv.ListenAndServe(a.cfg.Server.BootHTTPAddr); err != nil {
+		addr, err := netboot.BindAddr(a.cfg.Server.BootHTTPInterface, a.cfg.Server.BootHTTPAddr)
+		if err != nil {
+			return fmt.Errorf("boot-http: %w", err)
+		}
+		if err := a.bootSrv.ListenAndServe(addr); err != nil {
 			return fmt.Errorf("boot-http: %w", err)
 		}
 		return nil

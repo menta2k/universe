@@ -34,6 +34,9 @@ type Server struct {
 	GRPCAddr string `yaml:"grpc_addr"`
 	// BootHTTPAddr is the machine-facing boot service listen address.
 	BootHTTPAddr string `yaml:"boot_http_addr"`
+	// BootHTTPInterface restricts the boot service to one network interface:
+	// its IPv4 address replaces the host part of BootHTTPAddr. Empty = all.
+	BootHTTPInterface string `yaml:"boot_http_interface"`
 	// ExternalBootURL is the URL booting machines use to reach the boot
 	// service (embedded in DHCP options and iPXE scripts).
 	ExternalBootURL string `yaml:"external_boot_url"`
@@ -54,9 +57,12 @@ type Artifacts struct {
 }
 
 type Netboot struct {
-	DHCPInterface       string   `yaml:"dhcp_interface"`
-	DHCPAddr            string   `yaml:"dhcp_addr"`
-	TFTPAddr            string   `yaml:"tftp_addr"`
+	DHCPInterface string `yaml:"dhcp_interface"`
+	DHCPAddr      string `yaml:"dhcp_addr"`
+	TFTPAddr      string `yaml:"tftp_addr"`
+	// TFTPInterface restricts TFTP to one network interface: its IPv4
+	// address replaces the host part of TFTPAddr. Empty = all interfaces.
+	TFTPInterface       string   `yaml:"tftp_interface"`
 	StaleSessionTimeout Duration `yaml:"stale_session_timeout"`
 	SeedTokenTTL        Duration `yaml:"seed_token_ttl"`
 	LeaseTTL            Duration `yaml:"lease_ttl"`

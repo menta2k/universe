@@ -2,6 +2,9 @@ server:
   http_addr: ":8080"
   grpc_addr: ":9090"
   boot_http_addr: ":8082"
+  # Restrict the boot service to one network interface (its IPv4 address is
+  # used as the listen host). Empty = listen on all interfaces.
+  # boot_http_interface: "eth1"
   # URL booting machines use to reach this host (DHCP options / iPXE scripts).
   external_boot_url: "http://192.168.90.1:8082"
 
@@ -16,9 +19,13 @@ artifacts:
   max_upload_bytes: 4294967296
 
 netboot:
+  # DHCP binds directly to this interface at the socket level.
   dhcp_interface: "eth1"
   dhcp_addr: ":6767"
   tftp_addr: ":6969"
+  # Restrict TFTP to one network interface (its IPv4 address is used as the
+  # listen host). Empty = listen on all interfaces.
+  # tftp_interface: "eth1"
   stale_session_timeout: "60m"
   seed_token_ttl: "30m"
   lease_ttl: "1h"
