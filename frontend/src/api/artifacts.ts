@@ -5,7 +5,7 @@
  * int64 wire fields (sizes, byte counts, meta.total) arrive as strings under
  * protojson and are coerced with Number().
  */
-import { request, requestMultipart } from './http'
+import { nestPageQuery, request, requestMultipart } from './http'
 import type { ArtifactKind, BootArtifact, UbuntuRelease } from './types'
 
 const BASE = '/api/v1/artifacts'
@@ -127,6 +127,7 @@ export interface ArtifactListFilters {
 }
 
 export async function listArtifacts(filters: ArtifactListFilters = {}): Promise<ArtifactListPage> {
+  // ListArtifacts takes a bare PageRequest — flat page/page_size keys.
   const data = await request<WireArtifactList>(BASE, { query: { ...filters } })
   const artifacts = (data.artifacts ?? []).map(normalizeArtifact)
   return { artifacts, meta: normalizeMeta(data.meta, artifacts.length) }
@@ -146,7 +147,9 @@ function buildUploadForm(input: ArtifactUploadInput): FormData {
 }
 
 export async function uploadArtifact(input: ArtifactUploadInput): Promise<BootArtifact> {
-  const data = await requestMultipart<WireArtifact>(BASE, buildUploadForm(input), { method: 'POST' })
+  const data = await requestMultipart<WireArtifact>(BASE, buildUploadForm(input), {
+    method: 'POST',
+  })
   return normalizeArtifact(data)
 }
 
@@ -173,7 +176,9 @@ export interface TransferListFilters {
 }
 
 export async function listTransfers(filters: TransferListFilters = {}): Promise<TransferListPage> {
-  const data = await request<WireTransferList>(`${BASE}/transfers`, { query: { ...filters } })
+  const data = await request<WireTransferList>(`${BASE}/transfers`, {
+    query: nestPageQuery(filters),
+  })
   const transfers = (data.transfers ?? []).map(normalizeTransfer)
   return { transfers, meta: normalizeMeta(data.meta, transfers.length) }
 }

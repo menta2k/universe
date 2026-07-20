@@ -8,7 +8,7 @@
  *   - timeline `detail` and the session `evidence` arrive as JSON *strings*
  *     and are parsed into objects on read.
  */
-import { request } from './http'
+import { nestPageQuery, request } from './http'
 import type {
   EventOutcome,
   EventPhase,
@@ -137,7 +137,7 @@ function normalizeTimelineEntry(wire: WireTimelineEntry): ProvisioningEvent {
 }
 
 export async function listSessions(filters: SessionListFilters = {}): Promise<SessionListPage> {
-  const data = await request<WireSessionList>(BASE, { query: { ...filters } })
+  const data = await request<WireSessionList>(BASE, { query: nestPageQuery(filters) })
   const sessions = (data.sessions ?? []).map(normalizeSession)
   return { sessions, meta: normalizeMeta(data.meta, sessions.length) }
 }

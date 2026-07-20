@@ -40,6 +40,22 @@ export class ApiError extends Error {
 
 export type QueryParams = Readonly<Record<string, string | number | boolean | undefined>>
 
+/**
+ * Rewrites flat page/page_size filters into the nested `page.*` query keys
+ * required by RPCs whose request message wraps PageRequest in a `page` field
+ * (ListMachines, ListSessions, ListTransfers). Other filters pass through.
+ */
+export function nestPageQuery<T extends { readonly page?: number; readonly page_size?: number }>(
+  filters: T,
+): QueryParams {
+  const { page, page_size, ...rest } = filters
+  return {
+    ...(rest as QueryParams),
+    ...(page !== undefined ? { 'page.page': page } : {}),
+    ...(page_size !== undefined ? { 'page.page_size': page_size } : {}),
+  }
+}
+
 export interface RequestOptions {
   readonly method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   readonly body?: unknown

@@ -3,7 +3,7 @@
  * registration. All calls go through the shared http helper; pagination
  * `meta` arrives inside the reply payload (backend ListMachinesReply).
  */
-import { request } from './http'
+import { nestPageQuery, request } from './http'
 import type { Firmware, Machine, ProvisionState } from './types'
 
 const BASE = '/api/v1/machines'
@@ -92,7 +92,7 @@ function normalizeMeta(meta: WireMeta | undefined, fallbackCount: number): PageM
 }
 
 export async function listMachines(filters: MachineListFilters = {}): Promise<MachineListPage> {
-  const data = await request<WireMachineList>(BASE, { query: { ...filters } })
+  const data = await request<WireMachineList>(BASE, { query: nestPageQuery(filters) })
   const machines = data.machines ?? []
   return { machines, meta: normalizeMeta(data.meta, machines.length) }
 }
