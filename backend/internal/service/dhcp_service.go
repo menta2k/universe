@@ -20,6 +20,7 @@ func NewDhcpService(dhcp *biz.DhcpConfigUsecase) *DhcpService {
 }
 
 func toDhcpConfigReply(c *biz.DhcpConfig) *v1.DhcpConfig {
+	// #nosec G115 -- version is a small monotonic counter
 	reply := &v1.DhcpConfig{
 		Enabled: c.Enabled, Version: int32(c.Version),
 		LeaseTtlSeconds: int32(c.LeaseTTLSeconds),
@@ -78,7 +79,7 @@ func (s *DhcpService) ListLeases(ctx context.Context, req *v1.PageRequest) (*v1.
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	reply := &v1.ListLeasesReply{Meta: &v1.PageMeta{Total: total, Page: int32(page), PageSize: int32(size)}}
+	reply := &v1.ListLeasesReply{Meta: pageMeta(total, page, size)}
 	for _, l := range leases {
 		lease := &v1.Lease{Ip: l.IP, Mac: l.MAC, MachineId: l.MachineID, MachineName: l.MachineName}
 		if l.ExpiresAt > 0 {
@@ -95,7 +96,7 @@ func (s *DhcpService) ListForeignServers(ctx context.Context, req *v1.PageReques
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	reply := &v1.ListForeignServersReply{Meta: &v1.PageMeta{Total: total, Page: int32(page), PageSize: int32(size)}}
+	reply := &v1.ListForeignServersReply{Meta: pageMeta(total, page, size)}
 	for _, f := range servers {
 		reply.Servers = append(reply.Servers, &v1.ForeignServer{
 			ServerId: f.ServerID, LastSeen: timestamppb.New(unixToTime(f.LastSeen)),

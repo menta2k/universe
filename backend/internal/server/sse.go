@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -85,6 +84,6 @@ func passesFilter(payload, session, mac string) bool {
 // RegisterSSE mounts the stream on the given mux path.
 func RegisterSSE(mux interface {
 	HandleFunc(string, func(http.ResponseWriter, *http.Request))
-}, path string, s *EventStreamer, auth func(context.Context, *http.Request) bool) {
+}, path string, s *EventStreamer) {
 	mux.HandleFunc(path, s.ServeHTTP)
 }

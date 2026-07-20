@@ -13,7 +13,7 @@ func NewValidator() *Validator { return &Validator{} }
 // fixtureInput builds a representative render input for a profile so that
 // validation exercises the same path a real boot would.
 func fixtureInput(p *biz.Profile) Input {
-	return Input{
+	return Input{ // #nosec G101 -- fixture values for validation, not real credentials
 		Machine: &biz.Machine{ID: "fixture", MAC: "52:54:00:00:00:01", Name: "fixture-host"},
 		Profile: p,
 		Session: &biz.Session{ID: "fixture-session"},
@@ -39,7 +39,7 @@ func (Validator) Validate(p *biz.Profile) error {
 // PreviewRedacted renders the user-data with credentials replaced by a
 // placeholder, for the profile preview endpoint.
 func PreviewRedacted(m *biz.Machine, p *biz.Profile) (userData, cmdline string, err error) {
-	in := Input{
+	in := Input{ // #nosec G101 -- redaction placeholders, not real credentials
 		Machine: m, Profile: p, Session: &biz.Session{ID: "preview"},
 		BootURL: "http://preview.invalid:8082", SeedToken: "PREVIEW",
 		OneTimePasswordHash: "<redacted-one-time-hash>",

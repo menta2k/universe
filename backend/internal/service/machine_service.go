@@ -59,6 +59,13 @@ func pageParams(p *v1.PageRequest) (int, int) {
 	return int(p.Page), int(p.PageSize)
 }
 
+// pageMeta builds reply pagination metadata. page/size round-trip from int32
+// request fields (pageParams), so the conversions cannot overflow.
+func pageMeta(total int64, page, size int) *v1.PageMeta {
+	// #nosec G115 -- see above
+	return &v1.PageMeta{Total: total, Page: int32(page), PageSize: int32(size)}
+}
+
 func (s *MachineService) ListMachines(ctx context.Context, req *v1.ListMachinesRequest) (*v1.ListMachinesReply, error) {
 	page, size := pageParams(req.GetPage())
 	filter := biz.MachineFilter{
@@ -69,7 +76,7 @@ func (s *MachineService) ListMachines(ctx context.Context, req *v1.ListMachinesR
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	reply := &v1.ListMachinesReply{Meta: &v1.PageMeta{Total: total, Page: int32(page), PageSize: int32(size)}}
+	reply := &v1.ListMachinesReply{Meta: pageMeta(total, page, size)}
 	for _, m := range machines {
 		reply.Machines = append(reply.Machines, toMachineReply(m))
 	}
@@ -145,7 +152,7 @@ func (s *MachineService) ListUnknownBoots(ctx context.Context, req *v1.PageReque
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	reply := &v1.ListUnknownBootsReply{Meta: &v1.PageMeta{Total: total, Page: int32(page), PageSize: int32(size)}}
+	reply := &v1.ListUnknownBootsReply{Meta: pageMeta(total, page, size)}
 	for _, b := range boots {
 		reply.Boots = append(reply.Boots, &v1.UnknownBoot{
 			Mac: b.MAC, LastSeen: timestamppb.New(b.LastSeen), Attempts: b.Attempts,

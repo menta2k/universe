@@ -21,7 +21,6 @@ type Controller struct {
 	decider   BootDecider
 	events    EventSink
 	conflicts *ConflictWatcher
-	leaseTTL  time.Duration
 	log       *slog.Logger
 
 	mu      sync.Mutex

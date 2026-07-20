@@ -51,7 +51,7 @@ func (s *ArtifactService) ListArtifacts(ctx context.Context, req *v1.PageRequest
 	if err != nil {
 		return nil, mapArtifactErr(err)
 	}
-	reply := &v1.ListArtifactsReply{Meta: &v1.PageMeta{Total: total, Page: int32(page), PageSize: int32(size)}}
+	reply := &v1.ListArtifactsReply{Meta: pageMeta(total, page, size)}
 	for _, a := range arts {
 		reply.Artifacts = append(reply.Artifacts, toArtifactReply(a))
 	}
@@ -79,7 +79,7 @@ func (s *ArtifactService) ListTransfers(ctx context.Context, req *v1.ListTransfe
 	if err != nil {
 		return nil, mapArtifactErr(err)
 	}
-	reply := &v1.ListTransfersReply{Meta: &v1.PageMeta{Total: total, Page: int32(page), PageSize: int32(size)}}
+	reply := &v1.ListTransfersReply{Meta: pageMeta(total, page, size)}
 	for _, t := range transfers {
 		reply.Transfers = append(reply.Transfers, &v1.Transfer{
 			Time: timestamppb.New(t.Time), ClientIp: t.ClientIP, Filename: t.Filename,

@@ -37,6 +37,7 @@ func toProfileReply(p *biz.Profile) *v1.Profile {
 	if p.NetworkConfig == nil {
 		network = []byte("{}")
 	}
+	// #nosec G115 -- version is a small monotonic counter
 	return &v1.Profile{
 		Id: p.ID, Name: p.Name, Version: int32(p.Version),
 		UbuntuRelease: string(p.UbuntuRelease),
@@ -82,7 +83,7 @@ func (s *ProfileService) ListProfiles(ctx context.Context, req *v1.PageRequest) 
 	if err != nil {
 		return nil, mapProfileErr(err)
 	}
-	reply := &v1.ListProfilesReply{Meta: &v1.PageMeta{Total: total, Page: int32(page), PageSize: int32(size)}}
+	reply := &v1.ListProfilesReply{Meta: pageMeta(total, page, size)}
 	for _, p := range profiles {
 		reply.Profiles = append(reply.Profiles, toProfileReply(p))
 	}

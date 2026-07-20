@@ -23,7 +23,7 @@ func newHTTP(t *testing.T, srv *bootsrv.Server) string {
 
 // armMachine registers + provisions a machine and returns it plus the one-time
 // seed token extracted from its iPXE script.
-func armMachine(t *testing.T, ctx context.Context, srv *bootsrv.Server, machines *biz.MachineUsecase, mac, name, profileID, ipxeURL string) (*biz.Machine, string) {
+func armMachine(ctx context.Context, t *testing.T, machines *biz.MachineUsecase, mac, name, profileID, ipxeURL string) (*biz.Machine, string) {
 	t.Helper()
 	m, err := machines.Register(ctx, biz.RegisterInput{MAC: mac, Name: name, ProfileID: profileID})
 	if err != nil {
@@ -113,7 +113,7 @@ func TestBootMetaAndVendorData(t *testing.T) {
 	srv, machines, _ := newBootStack(t, env)
 	ts := newHTTP(t, srv)
 
-	_, token := armMachine(t, ctx, srv, machines, "52:54:00:00:0a:01", "meta-target", profileID, ts)
+	_, token := armMachine(ctx, t, machines, "52:54:00:00:0a:01", "meta-target", profileID, ts)
 
 	// meta-data with a valid token.
 	body, code := get(t, ts+"/boot/seed/"+token+"/meta-data")
@@ -149,7 +149,7 @@ func TestBootReportError(t *testing.T) {
 	srv, machines, _ := newBootStack(t, env)
 	ts := newHTTP(t, srv)
 
-	armed, token := armMachine(t, ctx, srv, machines, "52:54:00:00:0b:02", "fail-target", profileID, ts)
+	armed, token := armMachine(ctx, t, machines, "52:54:00:00:0b:02", "fail-target", profileID, ts)
 
 	// Invalid token -> 403.
 	rep, err := http.PostForm(ts+"/boot/report/deadbeef", map[string][]string{"status": {"error"}})

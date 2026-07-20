@@ -82,14 +82,14 @@ func sessionTokenFromContext(ctx context.Context) string {
 }
 
 // setSessionCookie writes/clears the session cookie on the HTTP response.
-func setSessionCookie(ctx context.Context, token string, clear bool) {
+func setSessionCookie(ctx context.Context, token string, expire bool) {
 	tr, ok := transport.FromServerContext(ctx)
 	if !ok {
 		return
 	}
 	header := tr.ReplyHeader()
 	cookie := SessionCookie + "=" + token + "; Path=/; HttpOnly; SameSite=Strict"
-	if clear {
+	if expire {
 		cookie += "; Max-Age=0"
 	}
 	header.Set("Set-Cookie", cookie)

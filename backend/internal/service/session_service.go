@@ -20,6 +20,7 @@ func NewSessionService(sessions *biz.SessionQueryUsecase) *SessionService {
 }
 
 func toSessionReply(v *biz.SessionView) *v1.ProvisioningSession {
+	// #nosec G115 -- profile version is a small monotonic counter
 	reply := &v1.ProvisioningSession{
 		Id: v.ID, MachineId: v.MachineID, MachineName: v.MachineName, MachineMac: v.MachineMAC,
 		ProfileId: v.ProfileID, ProfileVersion: int32(v.ProfileVersion),
@@ -41,7 +42,7 @@ func (s *SessionService) ListSessions(ctx context.Context, req *v1.ListSessionsR
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	reply := &v1.ListSessionsReply{Meta: &v1.PageMeta{Total: total, Page: int32(page), PageSize: int32(size)}}
+	reply := &v1.ListSessionsReply{Meta: pageMeta(total, page, size)}
 	for _, v := range views {
 		reply.Sessions = append(reply.Sessions, toSessionReply(v))
 	}

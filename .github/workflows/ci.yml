@@ -42,8 +42,9 @@ jobs:
       - name: go build
         run: go build ./...
       - name: Lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v8
         with:
+          version: v2.12.1
           working-directory: backend
       # Race + merged coverage with the 80% gate; the DB/Valkey-backed
       # integration tests boot their own testcontainers on the runner's Docker.
