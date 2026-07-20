@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -47,8 +48,33 @@ type Database struct {
 }
 
 type Valkey struct {
-	Addr     string `yaml:"addr"`
-	Password string `yaml:"password"`
+	// Addr is a single Valkey endpoint (standalone or one cluster seed).
+	Addr string `yaml:"addr"`
+	// Addrs lists multiple seed endpoints for a Valkey Cluster. When set it
+	// takes precedence over Addr. The client auto-detects cluster mode from
+	// any reachable seed, so listing several tolerates a seed being down at
+	// startup. Standalone deployments can keep using Addr.
+	Addrs    []string `yaml:"addrs"`
+	Username string   `yaml:"username"`
+	Password string   `yaml:"password"`
+}
+
+// Endpoints returns the seed addresses to dial: Addrs (trimmed, blanks
+// dropped) when non-empty, otherwise the single Addr.
+func (v Valkey) Endpoints() []string {
+	var out []string
+	for _, a := range v.Addrs {
+		if t := strings.TrimSpace(a); t != "" {
+			out = append(out, t)
+		}
+	}
+	if len(out) > 0 {
+		return out
+	}
+	if t := strings.TrimSpace(v.Addr); t != "" {
+		return []string{t}
+	}
+	return nil
 }
 
 type Artifacts struct {
@@ -145,7 +171,9 @@ func validate(c *Config) error {
 		}
 	}
 	req("database.dsn", c.Database.DSN)
-	req("valkey.addr", c.Valkey.Addr)
+	if len(c.Valkey.Endpoints()) == 0 {
+		errs = append(errs, fmt.Errorf("valkey.addr or valkey.addrs is required"))
+	}
 	req("artifacts.root", c.Artifacts.Root)
 	req("server.external_boot_url", c.Server.ExternalBootURL)
 	req("netboot.dhcp_interface", c.Netboot.DHCPInterface)

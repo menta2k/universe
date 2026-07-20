@@ -12,7 +12,16 @@ database:
   dsn: "postgres://netboot:netboot-dev@localhost:5433/netboot?sslmode=disable"
 
 valkey:
+  # Standalone: a single endpoint.
   addr: "localhost:6380"
+  # Cluster: list seed nodes instead (cluster mode is auto-detected). Listing
+  # several tolerates a seed being down at startup. Use either addr or addrs.
+  # addrs:
+  #   - "10.0.0.1:6379"
+  #   - "10.0.0.2:6379"
+  #   - "10.0.0.3:6379"
+  # username: ""   # for ACL auth
+  # password: ""
 
 artifacts:
   root: "./data/artifacts"

@@ -39,8 +39,12 @@ func New(ctx context.Context, c *conf.Config) (*Data, func(), error) {
 		return nil, nil, fmt.Errorf("ping database: %w", err)
 	}
 
+	// valkey-go auto-detects cluster vs standalone from the seed addresses,
+	// so the same client works for both; Endpoints() supplies one address or
+	// several cluster seeds (see conf.Valkey).
 	vk, err := valkey.NewClient(valkey.ClientOption{
-		InitAddress: []string{c.Valkey.Addr},
+		InitAddress: c.Valkey.Endpoints(),
+		Username:    c.Valkey.Username,
 		Password:    c.Valkey.Password,
 	})
 	if err != nil {
