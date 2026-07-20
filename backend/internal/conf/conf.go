@@ -98,6 +98,17 @@ type Events struct {
 	RetentionDays int `yaml:"retention_days"`
 }
 
+// BootFiles configures startup auto-fetch of kernel/initrd boot artifacts.
+type BootFiles struct {
+	// AutoFetch enables fetching missing kernel/initrd at startup.
+	AutoFetch bool `yaml:"auto_fetch"`
+	// Releases to ensure (defaults to noble + jammy when empty).
+	Releases []string `yaml:"releases"`
+	// ISOURLs optionally overrides the ISO location per release codename
+	// (for mirrors / air-gapped networks). Empty = discover from Ubuntu.
+	ISOURLs map[string]string `yaml:"iso_urls"`
+}
+
 type BootstrapOperator struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
@@ -110,6 +121,7 @@ type Config struct {
 	Artifacts         Artifacts         `yaml:"artifacts"`
 	Netboot           Netboot           `yaml:"netboot"`
 	Events            Events            `yaml:"events"`
+	BootFiles         BootFiles         `yaml:"boot_files"`
 	BootstrapOperator BootstrapOperator `yaml:"bootstrap_operator"`
 }
 

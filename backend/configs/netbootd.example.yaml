@@ -42,6 +42,18 @@ netboot:
 events:
   retention_days: 90
 
+boot_files:
+  # Auto-fetch missing kernel/initrd from the Ubuntu live-server ISO once at
+  # startup (only casper/vmlinuz + casper/initrd are read via HTTP range
+  # requests, not the full ISO). Fetched files are stored as artifacts and
+  # reused, so later starts are no-ops. Leave off to upload boot files manually.
+  auto_fetch: true
+  # Releases to ensure (defaults to noble + jammy when omitted).
+  releases: ["noble"]
+  # Optional per-release ISO override for mirrors / air-gapped networks:
+  # iso_urls:
+  #   noble: "http://mirror.local/ubuntu-24.04-live-server-amd64.iso"
+
 # Created on first start if no operator exists. Change the password immediately.
 bootstrap_operator:
   username: "admin"

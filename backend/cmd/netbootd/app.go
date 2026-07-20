@@ -17,6 +17,7 @@ import (
 	"github.com/menta2k/universe/backend/internal/data"
 	"github.com/menta2k/universe/backend/internal/netboot"
 	"github.com/menta2k/universe/backend/internal/netboot/autoinstall"
+	"github.com/menta2k/universe/backend/internal/netboot/bootfiles"
 	"github.com/menta2k/universe/backend/internal/netboot/bootsrv"
 	"github.com/menta2k/universe/backend/internal/netboot/dhcp"
 	"github.com/menta2k/universe/backend/internal/netboot/tftp"
@@ -39,6 +40,7 @@ type app struct {
 	sweeper    *biz.SessionSweeper
 	streamer   *server.EventStreamer
 	dhcpConfig *biz.DhcpConfigUsecase
+	bootFiles  *bootfiles.Fetcher
 }
 
 func newApp(ctx context.Context, cfg *conf.Config) (*app, func(), error) {
@@ -69,6 +71,7 @@ func newApp(ctx context.Context, cfg *conf.Config) (*app, func(), error) {
 		return nil, nil, err
 	}
 	artifacts := biz.NewArtifactUsecase(artifactStore, data.NewTransferRepo(d), log)
+	bootFileFetcher := bootfiles.New(artifactStore, bootFilesConfig(cfg), log)
 	sessionQuery := biz.NewSessionQueryUsecase(data.NewSessionQueryRepo(d))
 	sweeper := biz.NewSessionSweeper(sessionRepo, machineRepo,
 		events, cfg.Netboot.StaleSessionTimeout.Duration(), log)
@@ -129,7 +132,23 @@ func newApp(ctx context.Context, cfg *conf.Config) (*app, func(), error) {
 		cfg: cfg, log: log,
 		httpSrv: httpSrv, grpcSrv: grpcSrv, tftpSrv: tftpSrv, bootSrv: bootSrv,
 		dhcpCtl: dhcpCtl, sweeper: sweeper, streamer: streamer, dhcpConfig: dhcpConfig,
+		bootFiles: bootFileFetcher,
 	}, cleanup, nil
+}
+
+// bootFilesConfig maps the file config onto the fetcher's typed config.
+func bootFilesConfig(cfg *conf.Config) bootfiles.Config {
+	out := bootfiles.Config{}
+	for _, r := range cfg.BootFiles.Releases {
+		out.Releases = append(out.Releases, biz.UbuntuRelease(r))
+	}
+	if len(cfg.BootFiles.ISOURLs) > 0 {
+		out.ISOURLs = make(map[biz.UbuntuRelease]string, len(cfg.BootFiles.ISOURLs))
+		for k, v := range cfg.BootFiles.ISOURLs {
+			out.ISOURLs[biz.UbuntuRelease(k)] = v
+		}
+	}
+	return out
 }
 
 // hostIP extracts the host from an external URL like "http://192.168.90.1:8082".
@@ -198,6 +217,16 @@ func (a *app) start(ctx context.Context, g *errgroup.Group) {
 	g.Go(func() error {
 		return a.sweeper.Run(ctx)
 	})
+
+	// Auto-fetch missing kernel/initrd boot files once at startup (background,
+	// non-blocking; cached artifacts persist so subsequent starts are no-ops).
+	if a.cfg.BootFiles.AutoFetch {
+		g.Go(func() error {
+			a.log.Info("boot-file auto-fetch starting")
+			a.bootFiles.EnsureConfigured(ctx)
+			return nil
+		})
+	}
 }
 
 type kratosServer interface {
