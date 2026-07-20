@@ -55,11 +55,21 @@ func isoServer(t *testing.T, iso []byte) (*httptest.Server, *int) {
 // memStore is an in-memory ArtifactStore.
 type memStore struct {
 	saved map[string][]byte // "release/kind" -> content
+	files map[string][]byte // filename -> content
 }
 
-func newMemStore() *memStore { return &memStore{saved: map[string][]byte{}} }
+func newMemStore() *memStore {
+	return &memStore{saved: map[string][]byte{}, files: map[string][]byte{}}
+}
 
 func key(r biz.UbuntuRelease, k biz.ArtifactKind) string { return string(r) + "/" + string(k) }
+
+func (m *memStore) GetByFilename(_ context.Context, name string) (*biz.Artifact, error) {
+	if _, ok := m.files[name]; ok {
+		return &biz.Artifact{Filename: name}, nil
+	}
+	return nil, biz.ErrEntityNotFound
+}
 
 func (m *memStore) GetByReleaseKind(_ context.Context, r biz.UbuntuRelease, k biz.ArtifactKind) (*biz.Artifact, error) {
 	if _, ok := m.saved[key(r, k)]; ok {
@@ -74,6 +84,9 @@ func (m *memStore) Save(_ context.Context, meta *biz.Artifact, content io.Reader
 		return nil, err
 	}
 	m.saved[key(meta.UbuntuRelease, meta.Kind)] = b
+	if meta.Filename != "" {
+		m.files[meta.Filename] = b
+	}
 	return meta, nil
 }
 
@@ -139,6 +152,28 @@ func TestEnsureReleaseFetchesOnlyMissing(t *testing.T) {
 	}
 	if !bytes.Equal(store.saved[key(biz.ReleaseNoble, biz.ArtifactInitrd)], initrd) {
 		t.Error("initrd not fetched")
+	}
+}
+
+func TestEnsureReleaseServeISOStoresFullISO(t *testing.T) {
+	iso := buildISO(t, bytes.Repeat([]byte("K"), 3000), bytes.Repeat([]byte("I"), 3000))
+	srv, _ := isoServer(t, iso)
+	store := newMemStore()
+
+	f := New(store, Config{
+		Releases: []biz.UbuntuRelease{biz.ReleaseNoble},
+		ISOURLs:  map[biz.UbuntuRelease]string{biz.ReleaseNoble: srv.URL},
+		ServeISO: true,
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err := f.EnsureRelease(context.Background(), biz.ReleaseNoble); err != nil {
+		t.Fatalf("EnsureRelease: %v", err)
+	}
+	got, ok := store.files["noble.iso"]
+	if !ok {
+		t.Fatal("full iso was not stored")
+	}
+	if !bytes.Equal(got, iso) {
+		t.Errorf("stored iso mismatch: got %d bytes, want %d", len(got), len(iso))
 	}
 }
 

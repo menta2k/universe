@@ -102,6 +102,10 @@ type Events struct {
 type BootFiles struct {
 	// AutoFetch enables fetching missing kernel/initrd at startup.
 	AutoFetch bool `yaml:"auto_fetch"`
+	// ServeISO makes the daemon also fetch + serve the full install ISO and
+	// point casper at it (url=) so the installer's root filesystem loads over
+	// HTTP. Needed for Ubuntu live-server installs on networks without media.
+	ServeISO bool `yaml:"serve_iso"`
 	// Releases to ensure (defaults to noble + jammy when empty).
 	Releases []string `yaml:"releases"`
 	// ISOURLs optionally overrides the ISO location per release codename

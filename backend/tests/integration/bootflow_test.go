@@ -58,7 +58,7 @@ func newBootStack(t *testing.T, env *testenv.Env) (*bootsrv.Server, *biz.Machine
 
 	tokens := bootsrv.NewTokenStore(env.Data.Valkey, 30*time.Minute)
 	srv := bootsrv.NewServer("http://192.0.2.1:8082", facade, store, tokens,
-		bootsrv.NewOneTimeCredentialMinter(), events, log)
+		bootsrv.NewOneTimeCredentialMinter(), events, log, false)
 	return srv, machines, sessions
 }
 

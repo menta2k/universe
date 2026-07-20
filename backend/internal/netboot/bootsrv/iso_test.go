@@ -1,0 +1,109 @@
+package bootsrv
+
+import (
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/menta2k/universe/backend/internal/biz"
+)
+
+// fakeArtifacts implements ArtifactSource for the ISO serving tests.
+type fakeArtifacts struct {
+	byName map[string]*biz.Artifact
+}
+
+func (f fakeArtifacts) GetByReleaseKind(context.Context, biz.UbuntuRelease, biz.ArtifactKind) (*biz.Artifact, error) {
+	return nil, biz.ErrEntityNotFound
+}
+
+func (f fakeArtifacts) GetByFilename(_ context.Context, name string) (*biz.Artifact, error) {
+	if a, ok := f.byName[name]; ok {
+		return a, nil
+	}
+	return nil, biz.ErrEntityNotFound
+}
+
+func (f fakeArtifacts) Open(_ context.Context, a *biz.Artifact) (io.ReadCloser, error) {
+	return os.Open(a.Path)
+}
+
+func TestIPXEScriptInjectsISOURLWhenServing(t *testing.T) {
+	dec := &biz.BootDecision{Profile: &biz.Profile{UbuntuRelease: biz.ReleaseNoble}}
+
+	on := &Server{externalURL: "http://boot.example:8082", serveISO: true}
+	script := on.ipxeScript(dec, "autoinstall ds=nocloud-net;s=http://x/")
+	if !strings.Contains(script, "url=http://boot.example:8082/boot/iso/noble") {
+		t.Errorf("expected iso url in kernel cmdline, got:\n%s", script)
+	}
+	if !strings.Contains(script, "ip=dhcp") {
+		t.Errorf("expected ip=dhcp in cmdline, got:\n%s", script)
+	}
+
+	off := &Server{externalURL: "http://boot.example:8082", serveISO: false}
+	if s := off.ipxeScript(dec, "autoinstall"); strings.Contains(s, "url=") {
+		t.Errorf("iso url must not appear when serveISO is off, got:\n%s", s)
+	}
+}
+
+func TestHandleISOServesFileWithRanges(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "noble.iso")
+	content := []byte("PRETEND-ISO-BYTES-0123456789")
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	srv := &Server{
+		artifacts: fakeArtifacts{byName: map[string]*biz.Artifact{
+			"noble.iso": {Filename: "noble.iso", Path: path},
+		}},
+	}
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	// Full fetch.
+	resp, err := http.Get(ts.URL + "/boot/iso/noble")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if string(body) != string(content) {
+		t.Errorf("full body = %q, want %q", body, content)
+	}
+
+	// Range fetch (casper uses these).
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/boot/iso/noble", nil)
+	req.Header.Set("Range", "bytes=0-3")
+	rr, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rb, _ := io.ReadAll(rr.Body)
+	_ = rr.Body.Close()
+	if rr.StatusCode != http.StatusPartialContent {
+		t.Errorf("range status = %d, want 206", rr.StatusCode)
+	}
+	if string(rb) != "PRET" {
+		t.Errorf("range body = %q, want PRET", rb)
+	}
+}
+
+func TestHandleISOMissingIs404(t *testing.T) {
+	srv := &Server{artifacts: fakeArtifacts{byName: map[string]*biz.Artifact{}}}
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	resp, err := http.Get(ts.URL + "/boot/iso/noble")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}

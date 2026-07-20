@@ -19,11 +19,15 @@ type BootUsecase interface {
 	ReportInstall(ctx context.Context, sessionID, status, logTail string) error
 }
 
-// ArtifactSource opens kernel/initrd content for streaming.
+// ArtifactSource opens kernel/initrd/iso content for streaming.
 type ArtifactSource interface {
 	GetByReleaseKind(ctx context.Context, release biz.UbuntuRelease, kind biz.ArtifactKind) (*biz.Artifact, error)
+	GetByFilename(ctx context.Context, filename string) (*biz.Artifact, error)
 	Open(ctx context.Context, a *biz.Artifact) (io.ReadCloser, error)
 }
+
+// isoFilename is the stored filename for a release's install ISO.
+func isoFilename(release string) string { return release + ".iso" }
 
 // CredentialMinter creates a one-time password hash per session (FR-018).
 type CredentialMinter interface {
@@ -40,16 +44,20 @@ type Server struct {
 	events      *biz.EventRecorder
 	log         *slog.Logger
 	httpSrv     *http.Server
+	// serveISO makes the daemon serve the install ISO and add url=/ip=dhcp to
+	// the kernel cmdline so casper fetches its root filesystem over HTTP.
+	serveISO bool
 }
 
 func NewServer(
 	externalURL string, boot BootUsecase, artifacts ArtifactSource,
 	tokens *TokenStore, creds CredentialMinter, events *biz.EventRecorder, log *slog.Logger,
+	serveISO bool,
 ) *Server {
 	return &Server{
 		externalURL: strings.TrimRight(externalURL, "/"),
 		boot:        boot, artifacts: artifacts, tokens: tokens,
-		creds: creds, events: events, log: log,
+		creds: creds, events: events, log: log, serveISO: serveISO,
 	}
 }
 
@@ -57,6 +65,7 @@ func NewServer(
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /boot/ipxe/{mac}", s.handleIPXE)
+	mux.HandleFunc("GET /boot/iso/{release}", s.handleISO)
 	mux.HandleFunc("GET /boot/file/{release}/{kind}", s.handleFile)
 	mux.HandleFunc("GET /boot/seed/{token}/user-data", s.handleUserData)
 	mux.HandleFunc("GET /boot/seed/{token}/meta-data", s.handleMetaData)
@@ -128,12 +137,46 @@ func (s *Server) handleIPXE(w http.ResponseWriter, r *http.Request) {
 func (s *Server) ipxeScript(dec *biz.BootDecision, cmdline string) string {
 	base := s.externalURL
 	rel := string(dec.Profile.UbuntuRelease)
+	// When serving the ISO, point casper at it over HTTP so it can mount the
+	// live filesystem (otherwise it looks for install media and fails with
+	// "no medium found"). ip=dhcp brings networking up before the fetch.
+	if s.serveISO {
+		cmdline = fmt.Sprintf("%s ip=dhcp url=%s/boot/iso/%s", cmdline, base, rel)
+	}
 	var b strings.Builder
 	b.WriteString("#!ipxe\n")
 	fmt.Fprintf(&b, "kernel %s/boot/file/%s/kernel initrd=initrd %s\n", base, rel, cmdline)
 	fmt.Fprintf(&b, "initrd %s/boot/file/%s/initrd\n", base, rel)
 	b.WriteString("boot\n")
 	return b.String()
+}
+
+// handleISO serves the release install ISO with HTTP range support so casper
+// can fetch its root filesystem. The daemon must have the ISO stored (uploaded
+// or auto-fetched); missing ISO is a 404.
+func (s *Server) handleISO(w http.ResponseWriter, r *http.Request) {
+	release := r.PathValue("release")
+	art, err := s.artifacts.GetByFilename(r.Context(), isoFilename(release))
+	if err != nil {
+		http.Error(w, "iso not found", http.StatusNotFound)
+		return
+	}
+	rc, err := s.artifacts.Open(r.Context(), art)
+	if err != nil {
+		http.Error(w, "iso unavailable", http.StatusInternalServerError)
+		return
+	}
+	defer func() { _ = rc.Close() }()
+	rs, ok := rc.(io.ReadSeeker)
+	if !ok {
+		http.Error(w, "iso not seekable", http.StatusInternalServerError)
+		return
+	}
+	// ServeContent handles Range/If-Range/Content-Length so casper can fetch
+	// the filesystem in chunks.
+	http.ServeContent(w, r, art.Filename, art.UpdatedAt, rs)
+	s.record(r.Context(), biz.PhaseFileServed, biz.OutcomeOK, "", "",
+		map[string]any{"file": art.Filename})
 }
 
 // handleFile streams a kernel or initrd with a Content-Length (iPXE speed).
@@ -268,6 +311,9 @@ type sessionResolver interface {
 }
 
 func (s *Server) record(ctx context.Context, phase biz.Phase, outcome biz.Outcome, sessionID, mac string, detail map[string]any) {
+	if s.events == nil {
+		return
+	}
 	s.events.Record(ctx, biz.Event{
 		SessionID: sessionID, MachineMAC: mac, Phase: phase, Outcome: outcome, Detail: detail,
 	})

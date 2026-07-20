@@ -48,6 +48,11 @@ boot_files:
   # requests, not the full ISO). Fetched files are stored as artifacts and
   # reused, so later starts are no-ops. Leave off to upload boot files manually.
   auto_fetch: true
+  # Also fetch + serve the full install ISO and point casper at it (url=) so
+  # the live installer's root filesystem loads over HTTP. Required for Ubuntu
+  # live-server installs on networks without local media — without it the
+  # installer fails with "no medium found". Stores the full ISO once (~3 GB).
+  serve_iso: true
   # Releases to ensure (defaults to noble + jammy when omitted).
   releases: ["noble"]
   # Optional per-release ISO override for mirrors / air-gapped networks:

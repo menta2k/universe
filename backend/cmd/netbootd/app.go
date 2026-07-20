@@ -126,7 +126,7 @@ func newApp(ctx context.Context, cfg *conf.Config) (*app, func(), error) {
 	tftpSrv := tftp.NewServer(data.NewTFTPFileSource(artifactStore), data.NewTransferLogger(d), log)
 	tokens := bootsrv.NewTokenStore(d.Valkey, cfg.Netboot.SeedTokenTTL.Duration())
 	bootSrv := bootsrv.NewServer(cfg.Server.ExternalBootURL, bootFacade, artifactStore,
-		tokens, bootsrv.NewOneTimeCredentialMinter(), events, log)
+		tokens, bootsrv.NewOneTimeCredentialMinter(), events, log, cfg.BootFiles.ServeISO)
 
 	return &app{
 		cfg: cfg, log: log,
@@ -138,7 +138,7 @@ func newApp(ctx context.Context, cfg *conf.Config) (*app, func(), error) {
 
 // bootFilesConfig maps the file config onto the fetcher's typed config.
 func bootFilesConfig(cfg *conf.Config) bootfiles.Config {
-	out := bootfiles.Config{}
+	out := bootfiles.Config{ServeISO: cfg.BootFiles.ServeISO}
 	for _, r := range cfg.BootFiles.Releases {
 		out.Releases = append(out.Releases, biz.UbuntuRelease(r))
 	}

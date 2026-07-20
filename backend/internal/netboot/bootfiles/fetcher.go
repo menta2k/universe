@@ -17,6 +17,7 @@ import (
 // whether a release/kind already exists, and store a fetched file.
 type ArtifactStore interface {
 	GetByReleaseKind(ctx context.Context, release biz.UbuntuRelease, kind biz.ArtifactKind) (*biz.Artifact, error)
+	GetByFilename(ctx context.Context, filename string) (*biz.Artifact, error)
 	Save(ctx context.Context, meta *biz.Artifact, content io.Reader) (*biz.Artifact, error)
 }
 
@@ -35,6 +36,9 @@ type Config struct {
 	// air-gapped). When absent, the latest live-server ISO is discovered from
 	// releases.ubuntu.com.
 	ISOURLs map[biz.UbuntuRelease]string
+	// ServeISO additionally downloads the full ISO (once, cached) so the
+	// daemon can serve the installer's root filesystem over HTTP.
+	ServeISO bool
 }
 
 // Fetcher ensures kernel/initrd artifacts exist for a release, fetching them
@@ -68,15 +72,17 @@ func (f *Fetcher) EnsureConfigured(ctx context.Context) {
 	}
 }
 
-// EnsureRelease fetches kernel and initrd for release if either is missing.
-// Present artifacts are left untouched, so this is cheap to call repeatedly.
+// EnsureRelease fetches kernel and initrd for release if either is missing
+// (and the full ISO when ServeISO is set). Present artifacts are left
+// untouched, so this is cheap to call repeatedly.
 func (f *Fetcher) EnsureRelease(ctx context.Context, release biz.UbuntuRelease) error {
 	if _, ok := releaseVersion[release]; !ok {
 		return fmt.Errorf("unsupported release %q", release)
 	}
 	haveKernel := f.exists(ctx, release, biz.ArtifactKernel)
 	haveInitrd := f.exists(ctx, release, biz.ArtifactInitrd)
-	if haveKernel && haveInitrd {
+	haveISO := !f.cfg.ServeISO || f.isoExists(ctx, release)
+	if haveKernel && haveInitrd && haveISO {
 		return nil
 	}
 
@@ -84,24 +90,58 @@ func (f *Fetcher) EnsureRelease(ctx context.Context, release biz.UbuntuRelease) 
 	if err != nil {
 		return err
 	}
-	f.log.Info("fetching boot files from iso", "release", release, "url", url)
-	ra, err := newHTTPReaderAt(ctx, f.client, url)
-	if err != nil {
-		return err
-	}
 
-	if !haveKernel {
-		if err := f.store(ctx, release, biz.ArtifactKernel, "vmlinuz", ra); err != nil {
-			return fmt.Errorf("kernel: %w", err)
+	if !haveKernel || !haveInitrd {
+		f.log.Info("fetching boot files from iso", "release", release, "url", url)
+		ra, err := newHTTPReaderAt(ctx, f.client, url)
+		if err != nil {
+			return err
+		}
+		if !haveKernel {
+			if err := f.store(ctx, release, biz.ArtifactKernel, "vmlinuz", ra); err != nil {
+				return fmt.Errorf("kernel: %w", err)
+			}
+		}
+		if !haveInitrd {
+			if err := f.store(ctx, release, biz.ArtifactInitrd, "initrd", ra); err != nil {
+				return fmt.Errorf("initrd: %w", err)
+			}
 		}
 	}
-	if !haveInitrd {
-		if err := f.store(ctx, release, biz.ArtifactInitrd, "initrd", ra); err != nil {
-			return fmt.Errorf("initrd: %w", err)
+	if !haveISO {
+		if err := f.storeISO(ctx, release, url); err != nil {
+			return fmt.Errorf("iso: %w", err)
 		}
 	}
 	f.log.Info("boot files ready", "release", release)
 	return nil
+}
+
+func (f *Fetcher) isoExists(ctx context.Context, release biz.UbuntuRelease) bool {
+	_, err := f.artifacts.GetByFilename(ctx, string(release)+".iso")
+	return err == nil
+}
+
+// storeISO streams the full ISO to the artifact store so it can be served as
+// the installer's root filesystem over HTTP.
+func (f *Fetcher) storeISO(ctx context.Context, release biz.UbuntuRelease, url string) error {
+	f.log.Info("downloading full iso for serving", "release", release, "url", url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := f.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("get iso: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("get iso: status %d", resp.StatusCode)
+	}
+	_, err = f.artifacts.Save(ctx, &biz.Artifact{
+		Kind: biz.ArtifactOther, UbuntuRelease: release, Filename: string(release) + ".iso",
+	}, resp.Body)
+	return err
 }
 
 func (f *Fetcher) exists(ctx context.Context, release biz.UbuntuRelease, kind biz.ArtifactKind) bool {
