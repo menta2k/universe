@@ -71,11 +71,17 @@ func TestIPXEScriptNFSRootCmdline(t *testing.T) {
 	}
 	for _, want := range []string{
 		"netboot=nfs", "boot=casper", "nfsroot=10.1.114.3:/noble",
-		"ip=dhcp", "autoinstall ds=nocloud;s=http://x/", "network-config=disabled",
+		"ip=dhcp", "autoinstall ds=nocloud;s=http://x/",
 	} {
 		if !strings.Contains(script, want) {
 			t.Errorf("NFS cmdline missing %q, got:\n%s", want, script)
 		}
+	}
+	// Networking must stay under cloud-init control so the installer receives a
+	// resolver from DHCP; network-config=disabled left resolv.conf empty and apt
+	// failed (exit 100) on every extra-package install.
+	if strings.Contains(script, "network-config=disabled") {
+		t.Errorf("NFS cmdline must not disable cloud-init networking, got:\n%s", script)
 	}
 }
 

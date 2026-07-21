@@ -152,10 +152,16 @@ func (s *Server) ipxeScript(dec *biz.BootDecision, cmdline string) string {
 		// Low-memory path: casper mounts the squashfs live over NFS (paged) via
 		// netboot=nfs, instead of buffering the whole ISO in RAM. The release
 		// ISO is loop-mounted under the NFS export at /<release>.
-		// network-config=disabled avoids cloud-init reconfiguring the NIC used
-		// for the NFS mount mid-install.
+		//
+		// Networking is left under cloud-init/subiquity control (its default is
+		// DHCP on the boot NIC) so the installer gets a resolver and apt can
+		// reach the mirror. An earlier network-config=disabled here (to keep
+		// cloud-init off the NFS NIC) left /etc/resolv.conf empty, so every
+		// extra-package install failed with apt exit status 100; seeding
+		// resolv.conf from the autoinstall did not survive into curtin's target,
+		// whereas the cloud-init-managed DHCP path installs cleanly end to end.
 		cmdline = fmt.Sprintf(
-			"netboot=nfs boot=casper nfsroot=%s:/%s ip=dhcp %s network-config=disabled",
+			"netboot=nfs boot=casper nfsroot=%s:/%s ip=dhcp %s",
 			s.opts.NFSServerIP, rel, cmdline)
 	case s.opts.ServeISO:
 		// When serving the ISO, prepend the parameters casper needs to download
