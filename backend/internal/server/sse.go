@@ -50,7 +50,11 @@ func (s *EventStreamer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	dedicated, cancel := s.vk.Dedicate()
 	defer cancel()
 
-	err := dedicated.Receive(ctx, dedicated.B().Subscribe().Channel(s.channel).Build(),
+	// Sharded subscribe (SSUBSCRIBE) to match the publisher's SPUBLISH: plain
+	// PUBLISH/SUBSCRIBE over the cluster bus is unreliable through valkey-go and
+	// drops events, so events are pinned to one shard by slot. Both routes use
+	// the same channel name, so they resolve to the same shard. See event_repo.go.
+	err := dedicated.Receive(ctx, dedicated.B().Ssubscribe().Channel(s.channel).Build(),
 		func(msg valkey.PubSubMessage) {
 			if !passesFilter(msg.Message, filterSession, filterMAC) {
 				return

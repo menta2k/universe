@@ -62,7 +62,13 @@ func (p *EventPublisher) Publish(ctx context.Context, e biz.Event) error {
 	if err != nil {
 		return fmt.Errorf("marshal event: %w", err)
 	}
-	cmd := p.data.Valkey.B().Publish().Channel(EventsChannel).Message(string(payload)).Build()
+	// Sharded pub/sub (SPUBLISH), not plain PUBLISH: on a Valkey cluster the
+	// regular PUBLISH cluster-bus fan-out is unreliable through valkey-go and
+	// intermittently returns EOF (~10% of calls in production on kmx03), which
+	// silently drops live events from the SSE stream. SPUBLISH pins the channel
+	// to a single shard by slot; the SSE subscriber uses the matching SSUBSCRIBE
+	// so both land on the same shard. See sse.go.
+	cmd := p.data.Valkey.B().Spublish().Channel(EventsChannel).Message(string(payload)).Build()
 	if err := p.data.Valkey.Do(ctx, cmd).Error(); err != nil {
 		return fmt.Errorf("publish event: %w", err)
 	}
