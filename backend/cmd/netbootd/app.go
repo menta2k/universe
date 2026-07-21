@@ -265,10 +265,17 @@ func (a *app) start(ctx context.Context, g *errgroup.Group) {
 
 	// NFS server for low-memory netboot (netboot=nfs). Exports nfsDir; the
 	// per-release ISO mounts appear under it as machines are fetched.
+	//
+	// A bind failure here (e.g. port 2049 already held by the host's kernel
+	// NFS/rpcbind) MUST NOT take down the daemon: NFS-root is an optional
+	// installer-delivery method, whereas DHCP/TFTP/boot-HTTP are the core
+	// provisioning path. So the error is logged and swallowed rather than
+	// returned into the errgroup, which would cancel every other server.
 	if a.nfsSrv != nil {
 		g.Go(func() error {
 			if err := a.nfsSrv.ListenAndServe(a.nfsAddr()); err != nil && ctx.Err() == nil {
-				return fmt.Errorf("nfs: %w", err)
+				a.log.Error("nfs: server stopped; NFS-root netboot unavailable "+
+					"(core DHCP/TFTP/boot-HTTP unaffected)", "addr", a.nfsAddr(), "err", err)
 			}
 			return nil
 		})
