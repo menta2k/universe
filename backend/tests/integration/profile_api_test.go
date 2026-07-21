@@ -22,7 +22,7 @@ func newProfileService(t *testing.T, env *testenv.Env) (*service.ProfileService,
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	events := biz.NewEventRecorder(data.NewEventRepo(env.Data), data.NewEventPublisher(env.Data), log)
 	profileRepo := data.NewProfileRepo(env.Data)
-	profiles := biz.NewProfileUsecase(profileRepo, autoinstall.NewValidator(), log)
+	profiles := biz.NewProfileUsecase(profileRepo, autoinstall.NewValidator(), data.NewSha512Hasher(), log)
 	machines := biz.NewMachineUsecase(data.NewMachineRepo(env.Data), data.NewSessionRepo(env.Data),
 		profileRepo, &gate{enabled: true}, events, log)
 	return service.NewProfileService(profiles, machines), machines

@@ -142,6 +142,59 @@ func TestRenderDefaultHappyPath(t *testing.T) {
 	}
 }
 
+func TestRenderInstallIdentity(t *testing.T) {
+	t.Run("profile username and password override the defaults", func(t *testing.T) {
+		in := defaultInput()
+		in.Profile.InstallUsername = "operator"
+		in.Profile.InstallPasswordHash = "$6$abc$def"
+		userData, _, err := Render(in)
+		if err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		ai := parseUserData(t, userData)
+		identity, _ := ai["identity"].(map[string]any)
+		if identity["username"] != "operator" {
+			t.Errorf("username = %v, want operator", identity["username"])
+		}
+		if identity["password"] != "$6$abc$def" {
+			t.Errorf("password = %v, want profile hash", identity["password"])
+		}
+	})
+
+	t.Run("defaults fall back to ubuntu and the one-time hash", func(t *testing.T) {
+		in := defaultInput() // no InstallUsername/InstallPasswordHash
+		userData, _, err := Render(in)
+		if err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		identity, _ := parseUserData(t, userData)["identity"].(map[string]any)
+		if identity["username"] != identityUsername {
+			t.Errorf("username = %v, want %s", identity["username"], identityUsername)
+		}
+		if identity["password"] != in.OneTimePasswordHash {
+			t.Errorf("password = %v, want one-time hash", identity["password"])
+		}
+	})
+
+	t.Run("no SSH keys renders an empty list and stays key-only", func(t *testing.T) {
+		in := defaultInput()
+		in.Profile.SSHAuthorizedKeys = nil
+		in.Profile.InstallPasswordHash = "$6$abc$def"
+		userData, _, err := Render(in)
+		if err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		sshSec, _ := parseUserData(t, userData)["ssh"].(map[string]any)
+		keys, ok := sshSec["authorized-keys"].([]any)
+		if !ok || len(keys) != 0 {
+			t.Errorf("authorized-keys = %v, want empty list", sshSec["authorized-keys"])
+		}
+		if sshSec["allow-pw"] != false {
+			t.Errorf("allow-pw = %v, want false (SSH stays key-only)", sshSec["allow-pw"])
+		}
+	})
+}
+
 func TestRenderStorageModes(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -245,15 +298,21 @@ func TestRenderNetworkConfigPassthrough(t *testing.T) {
 	}
 }
 
-func TestRenderEmptySSHKeysFails(t *testing.T) {
+// TestRenderEmptySSHKeysSucceeds documents that the render layer no longer
+// requires SSH keys: a machine may authenticate by password instead. The
+// "keys or password" access policy is enforced in the biz profile use case, not
+// here, and identity always carries a password field (a real one or the
+// discarded one-time hash).
+func TestRenderEmptySSHKeysSucceeds(t *testing.T) {
 	in := defaultInput()
 	in.Profile.SSHAuthorizedKeys = nil
-	userData, metaData, err := Render(in)
-	if err == nil {
-		t.Fatal("Render() with no SSH keys: want error, got nil")
+	userData, _, err := Render(in)
+	if err != nil {
+		t.Fatalf("Render() with no SSH keys should succeed, got %v", err)
 	}
-	if userData != "" || metaData != "" {
-		t.Errorf("want empty outputs on error, got userData=%q metaData=%q", userData, metaData)
+	sshSec, _ := parseUserData(t, userData)["ssh"].(map[string]any)
+	if keys, ok := sshSec["authorized-keys"].([]any); !ok || len(keys) != 0 {
+		t.Errorf("authorized-keys = %v, want empty list", sshSec["authorized-keys"])
 	}
 }
 

@@ -77,6 +77,14 @@ func TestIPXEScriptNFSRootCmdline(t *testing.T) {
 			t.Errorf("NFS cmdline missing %q, got:\n%s", want, script)
 		}
 	}
+	// With an absolute export root, the release path is derived from it, so any
+	// configured release works without a per-release hardcode.
+	withRoot := &Server{externalURL: "http://boot.example:8082",
+		opts: BootOptions{NFSRoot: true, NFSServerIP: "10.1.114.3", NFSExportRoot: "/data/artifacts/nfs"}}
+	jammy := &biz.BootDecision{Profile: &biz.Profile{UbuntuRelease: biz.ReleaseJammy}}
+	if s := withRoot.ipxeScript(jammy, "autoinstall"); !strings.Contains(s, "nfsroot=10.1.114.3:/data/artifacts/nfs/jammy") {
+		t.Errorf("export-root path must be <root>/<release>, got:\n%s", s)
+	}
 	// Networking must stay under cloud-init control so the installer receives a
 	// resolver from DHCP; network-config=disabled left resolv.conf empty and apt
 	// failed (exit 100) on every extra-package install.

@@ -119,6 +119,18 @@ func renderDefault(in Input) (string, error) {
 		locale = "en_US.UTF-8"
 	}
 
+	// Identity: the profile can override the default account and set a real
+	// (sha512-crypt) password; otherwise fall back to "ubuntu" and the discarded
+	// one-time hash (key-only access). SSH stays key-only regardless — the
+	// password is for console/local login (allow-pw is always false).
+	username := in.Profile.InstallUsername
+	if username == "" {
+		username = identityUsername
+	}
+	password := in.Profile.InstallPasswordHash
+	if password == "" {
+		password = in.OneTimePasswordHash
+	}
 	ai := map[string]any{
 		"version": autoinstallVer,
 		"locale":  locale,
@@ -128,12 +140,12 @@ func renderDefault(in Input) (string, error) {
 		},
 		"identity": map[string]any{
 			"hostname": in.Machine.Name,
-			"username": identityUsername,
-			"password": in.OneTimePasswordHash,
+			"username": username,
+			"password": password,
 		},
 		"ssh": map[string]any{
 			"install-server":  true,
-			"authorized-keys": in.Profile.SSHAuthorizedKeys,
+			"authorized-keys": orEmptyStrings(in.Profile.SSHAuthorizedKeys),
 			"allow-pw":        false,
 		},
 		"storage":        storage,
@@ -154,6 +166,15 @@ func renderDefault(in Input) (string, error) {
 		return "", fmt.Errorf("marshal autoinstall document: %w", err)
 	}
 	return cloudConfigHeader + string(body), nil
+}
+
+// orEmptyStrings returns a non-nil slice so an empty SSH key list marshals as
+// an empty YAML sequence ("[]") rather than "null", which subiquity rejects.
+func orEmptyStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 // renderTemplate executes profile.UserDataTemplate as a Go text/template with
@@ -219,9 +240,16 @@ func validateDocument(userData string) error {
 	if allowPw, ok := sshSec["allow-pw"].(bool); !ok || allowPw {
 		return fmt.Errorf("autoinstall.ssh.allow-pw = %v, must be false", sshSec["allow-pw"])
 	}
-	keys, ok := sshSec["authorized-keys"].([]any)
-	if !ok || len(keys) == 0 {
-		return errors.New("autoinstall.ssh.authorized-keys must contain at least one key")
+	// authorized-keys must be present as a list, but may be empty: the profile
+	// use case guarantees access via SSH keys or a login password, and identity
+	// always carries a password field, so an empty key list is a valid
+	// password-only machine rather than a lockout.
+	if _, ok := sshSec["authorized-keys"].([]any); !ok {
+		return errors.New("autoinstall.ssh.authorized-keys must be a list")
+	}
+	identity, _ := ai["identity"].(map[string]any)
+	if pw, ok := identity["password"].(string); !ok || pw == "" {
+		return errors.New("autoinstall.identity.password must be set")
 	}
 	return nil
 }

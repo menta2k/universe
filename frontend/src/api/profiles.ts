@@ -41,6 +41,12 @@ export interface ProfileInput {
   readonly user_data_template: string | null
   readonly late_commands: readonly string[]
   readonly kernel_cmdline_extra: string
+  /** Login account for the installed OS; empty keeps the default ("ubuntu"). */
+  readonly install_username: string
+  /** Plaintext password, hashed server-side. Empty on update keeps the current one. */
+  readonly password?: string
+  /** Remove any stored password on update. */
+  readonly clear_password?: boolean
 }
 
 export interface ProfilePreview {
@@ -65,6 +71,8 @@ interface WireProfile {
   readonly user_data_template?: string | null
   readonly late_commands?: readonly string[]
   readonly kernel_cmdline_extra?: string
+  readonly install_username?: string
+  readonly has_password?: boolean
   readonly created_at?: string
   readonly updated_at?: string
   readonly assigned_machines?: number | string
@@ -118,6 +126,8 @@ function normalizeProfile(wire: WireProfile): Profile {
     user_data_template: wire.user_data_template ?? null,
     late_commands: wire.late_commands ?? [],
     kernel_cmdline_extra: wire.kernel_cmdline_extra ?? '',
+    install_username: wire.install_username ?? '',
+    has_password: wire.has_password ?? false,
     created_at: wire.created_at ?? '',
     updated_at: wire.updated_at ?? '',
     assigned_machines: Number(wire.assigned_machines ?? 0),

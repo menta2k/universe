@@ -36,6 +36,13 @@ interface ProfileFormState {
   networkConfig: string
   packages: string[]
   sshKeys: string[]
+  installUsername: string
+  /** New plaintext password to set (empty = keep existing / none). */
+  password: string
+  /** Remove the currently stored password (edit only). */
+  clearPassword: boolean
+  /** Whether the profile being edited already has a password stored. */
+  hasPassword: boolean
   lateCommands: string[]
   kernelCmdlineExtra: string
   userDataTemplate: string
@@ -187,6 +194,10 @@ function emptyForm(): ProfileFormState {
     networkConfig: '',
     packages: [],
     sshKeys: [''],
+    installUsername: '',
+    password: '',
+    clearPassword: false,
+    hasPassword: false,
     lateCommands: [],
     kernelCmdlineExtra: '',
     userDataTemplate: '',
@@ -214,6 +225,8 @@ function fromProfile(profile: Profile): ProfileFormState {
     storageCustom: profile.storage_layout.custom ?? '',
     packages: [...profile.packages],
     sshKeys: profile.ssh_authorized_keys.length > 0 ? [...profile.ssh_authorized_keys] : [''],
+    installUsername: profile.install_username ?? '',
+    hasPassword: profile.has_password ?? false,
     lateCommands: [...profile.late_commands],
     kernelCmdlineExtra: profile.kernel_cmdline_extra,
     userDataTemplate: profile.user_data_template ?? '',
@@ -228,6 +241,8 @@ const advancedOpen = ref<number[]>([])
 const title = computed(() => (props.mode === 'edit' ? 'Edit profile' : 'New profile'))
 
 const SSH_KEY_RE = /^(ssh-(rsa|ed25519|dss)|ecdsa-sha2-\S+|sk-ssh-\S+)\s+\S+/
+const INSTALL_USERNAME_RE = /^[a-z_][a-z0-9_-]{0,31}$/
+const showPassword = ref(false)
 
 function sshKeyState(key: string): 'empty' | 'valid' | 'invalid' {
   const trimmed = key.trim()
@@ -240,7 +255,14 @@ const localErrors = computed<Readonly<Record<string, string>>>(() => {
   if (!form.value.name.trim()) errors.name = 'Name is required'
 
   const keys = form.value.sshKeys.map((k) => k.trim()).filter(Boolean)
-  if (keys.length === 0) errors.ssh_authorized_keys = 'At least one SSH authorized key is required'
+  const hasEffectivePassword =
+    form.value.password.length > 0 || (form.value.hasPassword && !form.value.clearPassword)
+  if (keys.length === 0 && !hasEffectivePassword)
+    errors.ssh_authorized_keys = 'Provide at least one SSH key or a login password'
+
+  if (form.value.installUsername && !INSTALL_USERNAME_RE.test(form.value.installUsername))
+    errors.install_username =
+      'Start with a letter or underscore; use only a–z, 0–9, - or _'
 
   if (form.value.storageMode === 'custom' && !form.value.storageCustom.trim())
     errors.storage_layout = 'Custom storage layout requires a configuration body'
@@ -364,6 +386,9 @@ function submit(): void {
     network_config: serializeNetwork(),
     packages: form.value.packages.map((p) => p.trim()).filter(Boolean),
     ssh_authorized_keys: form.value.sshKeys.map((k) => k.trim()).filter(Boolean),
+    install_username: form.value.installUsername.trim(),
+    ...(form.value.password.length > 0 ? { password: form.value.password } : {}),
+    ...(form.value.clearPassword ? { clear_password: true } : {}),
     user_data_template: form.value.userDataTemplate.trim() || null,
     late_commands: form.value.lateCommands.map((c) => c.trim()).filter(Boolean),
     kernel_cmdline_extra: form.value.kernelCmdlineExtra.trim(),
@@ -486,16 +511,60 @@ defineExpose({ form, submit, localErrors })
           <!-- 3. Access -->
           <div class="section-label mt-6">
             <v-icon icon="mdi-key-chain" size="18" />
-            <span>SSH access</span>
+            <span>Access</span>
           </div>
           <v-alert
             class="mb-3"
             density="compact"
             icon="mdi-shield-key-outline"
-            text="Installed servers accept key-only login — no passwords. Paste at least one public key."
+            text="Grant access with an SSH key, a login password, or both. SSH itself stays key-only — the password is for console/local login."
             type="info"
             variant="tonal"
           />
+          <v-row dense>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model="form.installUsername"
+                data-testid="field-install-username"
+                density="compact"
+                :error-messages="fieldErrors('install_username')"
+                hide-details="auto"
+                label="Login username"
+                placeholder="ubuntu"
+                prepend-inner-icon="mdi-account-outline"
+                variant="outlined"
+              />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model="form.password"
+                autocomplete="new-password"
+                :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+                data-testid="field-install-password"
+                density="compact"
+                :disabled="form.clearPassword"
+                hide-details="auto"
+                label="Login password"
+                :placeholder="
+                  form.hasPassword ? '•••••••• (unchanged)' : 'Optional — blank means key-only'
+                "
+                prepend-inner-icon="mdi-lock-outline"
+                :type="showPassword ? 'text' : 'password'"
+                variant="outlined"
+                @click:append-inner="showPassword = !showPassword"
+              />
+            </v-col>
+          </v-row>
+          <v-checkbox
+            v-if="form.hasPassword"
+            v-model="form.clearPassword"
+            class="mt-1"
+            color="warning"
+            density="compact"
+            hide-details
+            label="Remove the stored password"
+          />
+          <div class="text-caption text-medium-emphasis mt-2 mb-1">SSH authorized keys</div>
           <div
             v-for="(_, index) in form.sshKeys"
             :key="`ssh-${index}`"

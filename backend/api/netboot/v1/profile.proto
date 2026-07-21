@@ -64,6 +64,8 @@ message Profile {
   string keyboard_variant = 16; // optional
   string locale = 17;           // e.g. en_US.UTF-8
   string timezone = 18;         // optional IANA tz
+  string install_username = 19; // login account; empty => "ubuntu"
+  bool has_password = 20;       // whether a login password is set (hash never returned)
 }
 
 message ProfileInput {
@@ -80,6 +82,12 @@ message ProfileInput {
   string keyboard_variant = 11;
   string locale = 12;
   string timezone = 13;
+  string install_username = 14; // login account; empty => "ubuntu"
+  // Plaintext login password, hashed (sha512-crypt) server-side and never
+  // stored or returned in the clear. Empty on update keeps the existing
+  // password; set clear_password to remove it.
+  string password = 15;
+  bool clear_password = 16;
 }
 
 message GetProfileRequest {

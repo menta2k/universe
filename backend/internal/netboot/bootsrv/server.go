@@ -51,12 +51,16 @@ type BootOptions struct {
 	// ServeISO adds root=/dev/ram0 ... url=<iso> so casper downloads the whole
 	// ISO into RAM.
 	ServeISO bool
-	// NFSRoot adds netboot=nfs boot=casper nfsroot=<ip>:/<release> so casper
-	// mounts the squashfs live over NFS (low memory).
+	// NFSRoot adds netboot=nfs boot=casper nfsroot=<ip>:<export>/<release> so
+	// casper mounts the squashfs live over NFS (low memory).
 	NFSRoot bool
 	// NFSServerIP is the address casper mounts the NFS root from (the
 	// provisioning interface IP).
 	NFSServerIP string
+	// NFSExportRoot is the server-absolute directory the NFS server exports;
+	// each release's tree lives at <NFSExportRoot>/<release>. Empty falls back
+	// to "" so the path is just /<release> (legacy single-root export).
+	NFSExportRoot string
 }
 
 func NewServer(
@@ -150,8 +154,9 @@ func (s *Server) ipxeScript(dec *biz.BootDecision, cmdline string) string {
 	switch {
 	case s.opts.NFSRoot:
 		// Low-memory path: casper mounts the squashfs live over NFS (paged) via
-		// netboot=nfs, instead of buffering the whole ISO in RAM. The release
-		// ISO is loop-mounted under the NFS export at /<release>.
+		// netboot=nfs, instead of buffering the whole ISO in RAM. Each release's
+		// ISO is loop-mounted under the export at <NFSExportRoot>/<release>, so
+		// the path is derived from the release with no per-release hardcode.
 		//
 		// Networking is left under cloud-init/subiquity control (its default is
 		// DHCP on the boot NIC) so the installer gets a resolver and apt can
@@ -161,8 +166,8 @@ func (s *Server) ipxeScript(dec *biz.BootDecision, cmdline string) string {
 		// resolv.conf from the autoinstall did not survive into curtin's target,
 		// whereas the cloud-init-managed DHCP path installs cleanly end to end.
 		cmdline = fmt.Sprintf(
-			"netboot=nfs boot=casper nfsroot=%s:/%s ip=dhcp %s",
-			s.opts.NFSServerIP, rel, cmdline)
+			"netboot=nfs boot=casper nfsroot=%s:%s/%s ip=dhcp %s",
+			s.opts.NFSServerIP, s.opts.NFSExportRoot, rel, cmdline)
 	case s.opts.ServeISO:
 		// When serving the ISO, prepend the parameters casper needs to download
 		// and loop-mount the live filesystem over HTTP (per Ubuntu's netboot

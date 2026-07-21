@@ -58,6 +58,10 @@ export interface Profile {
   readonly user_data_template: string | null
   readonly late_commands: readonly string[]
   readonly kernel_cmdline_extra: string
+  /** Login account created on the installed OS; empty means the default ("ubuntu"). */
+  readonly install_username: string
+  /** Whether a login password is configured. The hash itself is never returned. */
+  readonly has_password: boolean
   readonly created_at: string
   readonly updated_at: string
   /** Number of machines currently referencing this profile (blocks delete when > 0). */

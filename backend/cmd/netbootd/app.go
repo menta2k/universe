@@ -71,7 +71,7 @@ func newApp(ctx context.Context, cfg *conf.Config) (*app, func(), error) {
 	machines := biz.NewMachineUsecase(machineRepo, sessionRepo, profileRepo,
 		data.NewDhcpGate(d), events, log)
 	sessions := biz.NewSessionUsecase(sessionRepo, machineRepo, events, log)
-	profiles := biz.NewProfileUsecase(profileRepo, autoinstall.NewValidator(), log)
+	profiles := biz.NewProfileUsecase(profileRepo, autoinstall.NewValidator(), data.NewSha512Hasher(), log)
 	bootFacade := biz.NewBootFacade(machines, sessions)
 
 	artifactStore, err := data.NewArtifactStore(d, cfg.Artifacts.Root, cfg.Artifacts.MaxUploadBytes)
@@ -134,18 +134,27 @@ func newApp(ctx context.Context, cfg *conf.Config) (*app, func(), error) {
 	// machine-facing servers
 	tftpSrv := tftp.NewServer(data.NewTFTPFileSource(artifactStore), data.NewTransferLogger(d), log)
 	tokens := bootsrv.NewTokenStore(d.Valkey, cfg.Netboot.SeedTokenTTL.Duration())
-	bootSrv := bootsrv.NewServer(cfg.Server.ExternalBootURL, bootFacade, artifactStore,
-		tokens, bootsrv.NewOneTimeCredentialMinter(), events, log, bootsrv.BootOptions{
-			ServeISO:    cfg.BootFiles.ServeISO,
-			NFSRoot:     cfg.BootFiles.NFSRoot,
-			NFSServerIP: hostIP(cfg.Server.ExternalBootURL),
-		})
-
 	var nfsSrv *nfs.Server
 	nfsDir := filepath.Join(cfg.Artifacts.Root, "nfs")
+	// The nfsroot= boot option needs a server-absolute export path so it matches
+	// what the NFS server exports (whether the embedded server or the host's
+	// kernel nfsd exporting nfsDir); a relative path would be meaningless to the
+	// client. Fall back to the raw value if resolution fails.
+	nfsExportRoot := nfsDir
+	if abs, absErr := filepath.Abs(nfsDir); absErr == nil {
+		nfsExportRoot = abs
+	}
 	if cfg.BootFiles.NFSRoot {
 		nfsSrv = nfs.New(nfsDir, log)
 	}
+
+	bootSrv := bootsrv.NewServer(cfg.Server.ExternalBootURL, bootFacade, artifactStore,
+		tokens, bootsrv.NewOneTimeCredentialMinter(), events, log, bootsrv.BootOptions{
+			ServeISO:      cfg.BootFiles.ServeISO,
+			NFSRoot:       cfg.BootFiles.NFSRoot,
+			NFSServerIP:   hostIP(cfg.Server.ExternalBootURL),
+			NFSExportRoot: nfsExportRoot,
+		})
 
 	return &app{
 		cfg: cfg, log: log,
@@ -259,6 +268,13 @@ func (a *app) start(ctx context.Context, g *errgroup.Group) {
 			if a.cfg.BootFiles.NFSRoot {
 				a.mountNFSReleases(ctx)
 			}
+			return nil
+		})
+	} else if a.cfg.BootFiles.NFSRoot {
+		// No auto-fetch: the release ISOs are expected to be present already, so
+		// mount them for NFS export at startup instead of waiting on a fetch.
+		g.Go(func() error {
+			a.mountNFSReleases(ctx)
 			return nil
 		})
 	}

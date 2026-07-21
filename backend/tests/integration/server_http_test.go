@@ -44,7 +44,7 @@ func startFullServer(t *testing.T, env *testenv.Env) string {
 	profileRepo := data.NewProfileRepo(env.Data)
 	machines := biz.NewMachineUsecase(machineRepo, sessionRepo, profileRepo,
 		data.NewDhcpGate(env.Data), events, log)
-	profiles := biz.NewProfileUsecase(profileRepo, autoinstallValidator{}, log)
+	profiles := biz.NewProfileUsecase(profileRepo, autoinstallValidator{}, data.NewSha512Hasher(), log)
 	dhcpRepo := data.NewDhcpConfigRepo(env.Data)
 	dhcpUC := biz.NewDhcpConfigUsecase(dhcpRepo, data.NewLeaseRepo(env.Data), dhcpRepo, nil, log)
 	sessionsUC := biz.NewSessionQueryUsecase(data.NewSessionQueryRepo(env.Data))
