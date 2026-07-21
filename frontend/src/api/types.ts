@@ -30,9 +30,21 @@ export interface Machine {
   readonly notes: string
   /** Per-machine netplan override as a JSON string; empty means "use the profile's". */
   readonly network_config: string
+  /** Friendly production network; null/absent when not configured. */
+  readonly install_network: InstallNetwork | null
   readonly created_at: string
   readonly updated_at: string
   readonly active_session_id: string | null
+}
+
+/** Friendly "production network" for the 2-NIC netboot pattern. */
+export interface InstallNetwork {
+  /** Production IP in CIDR form, e.g. 10.0.0.10/24. */
+  readonly address: string
+  /** Default route next hop. */
+  readonly gateway: string
+  /** Nameservers; empty inherits the profile's default DNS. */
+  readonly dns: readonly string[]
 }
 
 export type UbuntuRelease = 'jammy' | 'noble'
@@ -66,6 +78,8 @@ export interface Profile {
   readonly has_password: boolean
   readonly created_at: string
   readonly updated_at: string
+  /** Fallback DNS servers a machine's production network inherits. */
+  readonly default_dns: readonly string[]
   /** Number of machines currently referencing this profile (blocks delete when > 0). */
   readonly assigned_machines: number
 }

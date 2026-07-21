@@ -46,12 +46,34 @@ type Machine struct {
 	State         ProvisionState
 	Notes         string
 	// NetworkConfig, when non-empty, is a per-machine netplan that overrides the
-	// assigned profile's network for this machine during install.
-	NetworkConfig   map[string]any
+	// assigned profile's network for this machine during install (advanced).
+	NetworkConfig map[string]any
+	// InstallNetwork, when set (Address != ""), is the friendly "production
+	// network" for the 2-NIC netboot pattern: the production NIC gets this
+	// static config (the only default route) and the provisioning NIC is taken
+	// down after install. Takes precedence over NetworkConfig.
+	InstallNetwork  InstallNetwork
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	ActiveSessionID string
 }
+
+// InstallNetwork is the structured production-network override for a machine.
+// It is rendered into an NFS-safe late-command rather than the autoinstall
+// network section, so the installer keeps its provisioning-NIC DHCP lease.
+type InstallNetwork struct {
+	// Address is the production IP in CIDR form, e.g. "10.0.0.10/24". Empty
+	// means "no production override".
+	Address string `json:"address,omitempty"`
+	// Gateway is the default route's next hop; the production NIC carries the
+	// only default route after install.
+	Gateway string `json:"gateway,omitempty"`
+	// DNS is the nameserver list; empty falls back to the profile's DefaultDNS.
+	DNS []string `json:"dns,omitempty"`
+}
+
+// IsSet reports whether a production network override is configured.
+func (n InstallNetwork) IsSet() bool { return n.Address != "" }
 
 // MachineUpdate carries optional field changes (immutability: repos return
 // fresh copies; nil pointer = leave unchanged).
@@ -65,6 +87,9 @@ type MachineUpdate struct {
 	// NetworkConfig replaces the per-machine network override when non-nil; an
 	// empty map clears it (falls back to the profile's network).
 	NetworkConfig *map[string]any
+	// InstallNetwork replaces the production-network override when non-nil; a
+	// zero value (empty Address) clears it.
+	InstallNetwork *InstallNetwork
 }
 
 // MachineFilter narrows List queries.
@@ -130,10 +155,11 @@ type RegisterInput struct {
 	MAC           string
 	Name          string
 	Firmware      Firmware
-	ProfileID     string
-	ReservationIP string
-	Notes         string
-	NetworkConfig map[string]any
+	ProfileID      string
+	ReservationIP  string
+	Notes          string
+	NetworkConfig  map[string]any
+	InstallNetwork InstallNetwork
 }
 
 // ValidationError carries per-field messages to the API layer.
@@ -197,6 +223,7 @@ func (u *MachineUsecase) Register(ctx context.Context, in RegisterInput) (*Machi
 		MAC: in.MAC, Name: in.Name, Firmware: fw,
 		ProfileID: in.ProfileID, ReservationIP: in.ReservationIP,
 		State: state, Notes: in.Notes, NetworkConfig: in.NetworkConfig,
+		InstallNetwork: in.InstallNetwork,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create machine: %w", err)

@@ -34,6 +34,7 @@ const input: ProfileInput = {
   packages: ['vim'],
   ssh_authorized_keys: ['ssh-ed25519 AAAA'],
   install_username: '',
+  default_dns: [],
   user_data_template: null,
   late_commands: [],
   kernel_cmdline_extra: 'console=ttyS0',

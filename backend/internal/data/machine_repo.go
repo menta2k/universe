@@ -22,13 +22,13 @@ func NewMachineRepo(d *Data) *MachineRepo { return &MachineRepo{data: d} }
 
 const machineCols = `id, mac::text, name, firmware, coalesce(profile_id::text,''),
 	coalesce(host(reservation_ip),''), provision_state, notes, network_config,
-	created_at, updated_at`
+	install_network, created_at, updated_at`
 
 func scanMachine(row pgx.Row) (*biz.Machine, error) {
 	var m biz.Machine
-	var network []byte
+	var network, installNet []byte
 	err := row.Scan(&m.ID, &m.MAC, &m.Name, &m.Firmware, &m.ProfileID,
-		&m.ReservationIP, &m.State, &m.Notes, &network, &m.CreatedAt, &m.UpdatedAt)
+		&m.ReservationIP, &m.State, &m.Notes, &network, &installNet, &m.CreatedAt, &m.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, biz.ErrEntityNotFound
 	}
@@ -38,6 +38,11 @@ func scanMachine(row pgx.Row) (*biz.Machine, error) {
 	if len(network) > 0 && string(network) != "{}" {
 		if err := json.Unmarshal(network, &m.NetworkConfig); err != nil {
 			return nil, fmt.Errorf("decode machine network config: %w", err)
+		}
+	}
+	if len(installNet) > 0 && string(installNet) != "{}" {
+		if err := json.Unmarshal(installNet, &m.InstallNetwork); err != nil {
+			return nil, fmt.Errorf("decode machine install network: %w", err)
 		}
 	}
 	return &m, nil
@@ -102,11 +107,15 @@ func (r *MachineRepo) Create(ctx context.Context, m *biz.Machine) (*biz.Machine,
 	if err != nil {
 		return nil, fmt.Errorf("marshal machine network config: %w", err)
 	}
+	installNet, err := json.Marshal(m.InstallNetwork)
+	if err != nil {
+		return nil, fmt.Errorf("marshal machine install network: %w", err)
+	}
 	created, err := scanMachine(r.data.Pool.QueryRow(ctx,
-		`INSERT INTO machines (mac, name, firmware, profile_id, reservation_ip, provision_state, notes, network_config)
-		 VALUES ($1::macaddr, $2, $3, NULLIF($4,'')::uuid, NULLIF($5,'')::inet, $6, $7, $8)
+		`INSERT INTO machines (mac, name, firmware, profile_id, reservation_ip, provision_state, notes, network_config, install_network)
+		 VALUES ($1::macaddr, $2, $3, NULLIF($4,'')::uuid, NULLIF($5,'')::inet, $6, $7, $8, $9)
 		 RETURNING `+machineCols,
-		m.MAC, m.Name, string(m.Firmware), m.ProfileID, m.ReservationIP, string(m.State), m.Notes, network))
+		m.MAC, m.Name, string(m.Firmware), m.ProfileID, m.ReservationIP, string(m.State), m.Notes, network, installNet))
 	if err != nil {
 		return nil, wrapConstraint(err, map[string]string{
 			"machines_mac_key":            "mac already registered",
@@ -148,6 +157,13 @@ func (r *MachineRepo) Update(ctx context.Context, id string, u biz.MachineUpdate
 			return nil, fmt.Errorf("marshal machine network config: %w", err)
 		}
 		set = append(set, "network_config = "+arg(network))
+	}
+	if u.InstallNetwork != nil {
+		installNet, err := json.Marshal(*u.InstallNetwork)
+		if err != nil {
+			return nil, fmt.Errorf("marshal machine install network: %w", err)
+		}
+		set = append(set, "install_network = "+arg(installNet))
 	}
 	return scanMachine(r.data.Pool.QueryRow(ctx,
 		"UPDATE machines SET "+strings.Join(set, ", ")+" WHERE id = $1 RETURNING "+machineCols,

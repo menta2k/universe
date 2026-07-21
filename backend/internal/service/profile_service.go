@@ -48,6 +48,7 @@ func toProfileReply(p *biz.Profile) *v1.Profile {
 		KeyboardLayout:     p.KeyboardLayout, KeyboardVariant: p.KeyboardVariant,
 		Locale: p.Locale, Timezone: p.Timezone,
 		InstallUsername: p.InstallUsername, HasPassword: p.InstallPasswordHash != "",
+		DefaultDns: p.DefaultDNS,
 		CreatedAt: timestamppb.New(p.CreatedAt), UpdatedAt: timestamppb.New(p.UpdatedAt),
 		AssignedMachines: p.AssignedMachines,
 	}
@@ -64,6 +65,7 @@ func parseInput(in *v1.ProfileInput) (biz.ProfileInput, error) {
 		Locale: in.GetLocale(), Timezone: in.GetTimezone(),
 		InstallUsername: in.GetInstallUsername(),
 		Password:        in.GetPassword(), ClearPassword: in.GetClearPassword(),
+		DefaultDNS: in.GetDefaultDns(),
 	}
 	if s := in.GetStorageLayout(); s != "" {
 		if err := json.Unmarshal([]byte(s), &out.StorageLayout); err != nil {

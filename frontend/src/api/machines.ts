@@ -4,7 +4,7 @@
  * `meta` arrives inside the reply payload (backend ListMachinesReply).
  */
 import { nestPageQuery, request } from './http'
-import type { Firmware, Machine, ProvisionState } from './types'
+import type { Firmware, InstallNetwork, Machine, ProvisionState } from './types'
 
 const BASE = '/api/v1/machines'
 
@@ -25,6 +25,8 @@ export interface CreateMachineInput {
   readonly notes?: string
   /** Per-machine netplan override as a JSON string; empty uses the profile's. */
   readonly network_config?: string
+  /** Friendly production network; address "" means not configured. */
+  readonly install_network?: InstallNetwork
 }
 
 export interface UpdateMachineInput {
@@ -34,6 +36,8 @@ export interface UpdateMachineInput {
   readonly notes?: string
   /** JSON netplan override; empty string clears it (falls back to the profile). */
   readonly network_config?: string
+  /** Friendly production network; send with address "" to clear it. */
+  readonly install_network?: InstallNetwork
 }
 
 export interface UnknownBoot {

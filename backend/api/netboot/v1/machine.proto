@@ -69,6 +69,16 @@ message Machine {
   google.protobuf.Timestamp updated_at = 10;
   string active_session_id = 11; // empty when no active session
   string network_config = 12;    // JSON netplan override; empty => use profile's
+  InstallNetwork install_network = 13; // friendly production network; unset when not configured
+}
+
+// InstallNetwork is the friendly "production network" for the 2-NIC netboot
+// pattern: the production NIC gets this static config (the only default route)
+// and the provisioning NIC is taken down after install.
+message InstallNetwork {
+  string address = 1;          // production IP in CIDR form, e.g. 10.0.0.10/24
+  string gateway = 2;          // default route next hop
+  repeated string dns = 3;     // nameservers; empty inherits the profile default
 }
 
 message ListMachinesRequest {
@@ -95,6 +105,7 @@ message CreateMachineRequest {
   string reservation_ip = 5;
   string notes = 6;
   string network_config = 7; // JSON netplan override; empty => use profile's
+  InstallNetwork install_network = 8; // friendly production network
 }
 
 message UpdateMachineRequest {
@@ -104,6 +115,9 @@ message UpdateMachineRequest {
   optional string reservation_ip = 4;
   optional string notes = 5;
   optional string network_config = 6; // JSON netplan override; "" clears it
+  // Set to replace the production network; an InstallNetwork with an empty
+  // address clears it.
+  InstallNetwork install_network = 7;
 }
 
 message UnknownBoot {

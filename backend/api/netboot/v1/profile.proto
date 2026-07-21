@@ -66,6 +66,7 @@ message Profile {
   string timezone = 18;         // optional IANA tz
   string install_username = 19; // login account; empty => "ubuntu"
   bool has_password = 20;       // whether a login password is set (hash never returned)
+  repeated string default_dns = 21; // fallback DNS for machine production networks
 }
 
 message ProfileInput {
@@ -88,6 +89,7 @@ message ProfileInput {
   // password; set clear_password to remove it.
   string password = 15;
   bool clear_password = 16;
+  repeated string default_dns = 17;
 }
 
 message GetProfileRequest {

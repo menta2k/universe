@@ -7,9 +7,11 @@
 import { computed, ref, watch } from 'vue'
 
 import { listProfiles } from '../api/profiles'
-import type { Firmware, Profile } from '../api/types'
+import type { Firmware, InstallNetwork, Profile } from '../api/types'
 import {
   type NicForm,
+  CIDR_RE,
+  IPV4_RE,
   defaultNic,
   emptyNic,
   parseNetworkConfig,
@@ -28,10 +30,12 @@ export interface MachineFormValues {
   readonly notes: string
   /** Per-machine netplan override as a JSON string; empty means "inherit profile". */
   readonly network_config: string
+  /** Friendly production network; address "" means not configured. */
+  readonly install_network: InstallNetwork
 }
 
-/** Machine network override modes: inherit the profile, or override per-NIC / raw. */
-type MachineNetworkMode = 'inherit' | 'static' | 'advanced'
+/** Network modes: inherit the profile, the friendly production form, or raw netplan. */
+type MachineNetworkMode = 'inherit' | 'production' | 'static' | 'advanced'
 
 /** Mutable local edit state; v-select `clearable` may set profile_id to null. */
 interface MachineFormState {
@@ -44,6 +48,9 @@ interface MachineFormState {
   networkMode: MachineNetworkMode
   nics: NicForm[]
   networkAdvanced: string
+  prodAddress: string
+  prodGateway: string
+  prodDns: string
 }
 
 const props = defineProps<{
@@ -72,6 +79,7 @@ const FIRMWARE_OPTIONS: readonly { title: string; value: Firmware }[] = [
 
 const NETWORK_MODE_OPTIONS: readonly { title: string; value: MachineNetworkMode }[] = [
   { title: 'Inherit from profile', value: 'inherit' },
+  { title: 'Production network (2-NIC install)', value: 'production' },
   { title: 'Override interfaces', value: 'static' },
   { title: 'Advanced (netplan JSON)', value: 'advanced' },
 ]
@@ -87,6 +95,9 @@ function emptyForm(): MachineFormState {
     networkMode: 'inherit',
     nics: [defaultNic()],
     networkAdvanced: '',
+    prodAddress: '',
+    prodGateway: '',
+    prodDns: '',
   }
 }
 
@@ -94,8 +105,16 @@ function emptyForm(): MachineFormState {
 function formFromInitial(initial?: Partial<MachineFormValues>): MachineFormState {
   const base = emptyForm()
   if (!initial) return base
-  const { network_config, ...rest } = initial
+  const { network_config, install_network, ...rest } = initial
   const state: MachineFormState = { ...base, ...rest }
+  // A configured production network takes precedence over a raw override.
+  if (install_network && install_network.address) {
+    state.networkMode = 'production'
+    state.prodAddress = install_network.address
+    state.prodGateway = install_network.gateway
+    state.prodDns = (install_network.dns ?? []).join(', ')
+    return state
+  }
   const raw = (network_config ?? '').trim()
   if (raw) {
     try {
@@ -116,11 +135,24 @@ function formFromInitial(initial?: Partial<MachineFormValues>): MachineFormState
   return state
 }
 
-/** Serialises the network override back to a JSON string ('' = inherit). */
+/** Serialises the raw netplan override ('' = inherit / production handled separately). */
 function serializeNetworkOverride(state: MachineFormState): string {
-  if (state.networkMode === 'inherit') return ''
+  if (state.networkMode === 'static') return serializeNics(state.nics)
   if (state.networkMode === 'advanced') return state.networkAdvanced.trim()
-  return serializeNics(state.nics)
+  return ''
+}
+
+/** Builds the production network payload ('' address = not configured / cleared). */
+function productionNetwork(state: MachineFormState): InstallNetwork {
+  if (state.networkMode !== 'production') return { address: '', gateway: '', dns: [] }
+  return {
+    address: state.prodAddress.trim(),
+    gateway: state.prodGateway.trim(),
+    dns: state.prodDns
+      .split(/[,\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+  }
 }
 
 const form = ref<MachineFormState>(emptyForm())
@@ -154,7 +186,12 @@ const localErrors = computed<Readonly<Record<string, string>>>(() => {
     errors.reservation_ip = 'Enter a valid IPv4 address'
   if (isRegisterUnknown.value && !form.value.profile_id)
     errors.profile_id = 'Profile is required when registering from an unknown boot'
-  if (form.value.networkMode === 'static') {
+  if (form.value.networkMode === 'production') {
+    if (!CIDR_RE.test(form.value.prodAddress.trim()))
+      errors.prod_address = 'Enter an address in CIDR form, e.g. 10.0.0.10/24'
+    if (form.value.prodGateway.trim() && !IPV4_RE.test(form.value.prodGateway.trim()))
+      errors.prod_gateway = 'Enter a valid IPv4 gateway'
+  } else if (form.value.networkMode === 'static') {
     Object.assign(errors, validateNics(form.value.nics))
   } else if (form.value.networkMode === 'advanced' && form.value.networkAdvanced.trim()) {
     try {
@@ -223,6 +260,7 @@ function submit(): void {
     reservation_ip: form.value.reservation_ip.trim(),
     notes: form.value.notes.trim(),
     network_config: serializeNetworkOverride(form.value),
+    install_network: productionNetwork(form.value),
   })
 }
 
@@ -312,6 +350,51 @@ defineExpose({ form, submit, localErrors })
             <div v-if="form.networkMode !== 'inherit'" class="text-caption text-medium-emphasis mb-2">
               Overrides the profile's network for this machine only.
             </div>
+
+            <template v-if="form.networkMode === 'production'">
+              <div class="text-caption text-medium-emphasis mb-2">
+                Install over the provisioning NIC (DHCP), then bring it down and configure the
+                production NIC statically as the only default route. The production NIC is detected
+                automatically as the non-boot interface.
+              </div>
+              <v-text-field
+                v-model="form.prodAddress"
+                class="mb-2"
+                data-testid="field-prod-address"
+                density="compact"
+                :error-messages="fieldErrors('prod_address')"
+                hide-details="auto"
+                label="Production IP (CIDR)"
+                placeholder="10.20.0.10/24"
+                prepend-inner-icon="mdi-ip-outline"
+                variant="outlined"
+              />
+              <v-text-field
+                v-model="form.prodGateway"
+                class="mb-2"
+                data-testid="field-prod-gateway"
+                density="compact"
+                :error-messages="fieldErrors('prod_gateway')"
+                hide-details="auto"
+                label="Default gateway"
+                placeholder="10.20.0.1"
+                prepend-inner-icon="mdi-router-network"
+                variant="outlined"
+              />
+              <v-text-field
+                v-model="form.prodDns"
+                class="mb-2"
+                data-testid="field-prod-dns"
+                density="compact"
+                hide-details="auto"
+                hint="Comma-separated. Leave blank to use the profile's default DNS."
+                label="DNS servers"
+                persistent-hint
+                placeholder="1.1.1.1, 8.8.8.8"
+                prepend-inner-icon="mdi-dns-outline"
+                variant="outlined"
+              />
+            </template>
 
             <template v-if="form.networkMode === 'static'">
               <div

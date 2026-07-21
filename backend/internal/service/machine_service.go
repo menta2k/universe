@@ -29,14 +29,31 @@ func toMachineReply(m *biz.Machine) *v1.Machine {
 			network = string(b)
 		}
 	}
+	var installNet *v1.InstallNetwork
+	if m.InstallNetwork.IsSet() {
+		installNet = &v1.InstallNetwork{
+			Address: m.InstallNetwork.Address,
+			Gateway: m.InstallNetwork.Gateway,
+			Dns:     m.InstallNetwork.DNS,
+		}
+	}
 	return &v1.Machine{
 		Id: m.ID, Mac: m.MAC, Name: m.Name, Firmware: string(m.Firmware),
 		ProfileId: m.ProfileID, ReservationIp: m.ReservationIP,
 		ProvisionState: string(m.State), Notes: m.Notes,
-		NetworkConfig: network,
-		CreatedAt:     timestamppb.New(m.CreatedAt), UpdatedAt: timestamppb.New(m.UpdatedAt),
+		NetworkConfig:  network,
+		InstallNetwork: installNet,
+		CreatedAt:      timestamppb.New(m.CreatedAt), UpdatedAt: timestamppb.New(m.UpdatedAt),
 		ActiveSessionId: m.ActiveSessionID,
 	}
+}
+
+// installNetworkFromProto maps the proto message to the biz value (zero when nil).
+func installNetworkFromProto(n *v1.InstallNetwork) biz.InstallNetwork {
+	if n == nil {
+		return biz.InstallNetwork{}
+	}
+	return biz.InstallNetwork{Address: n.GetAddress(), Gateway: n.GetGateway(), DNS: n.GetDns()}
 }
 
 // parseMachineNetwork decodes a JSON netplan override string into a map. Empty
@@ -121,7 +138,7 @@ func (s *MachineService) CreateMachine(ctx context.Context, req *v1.CreateMachin
 	m, err := s.machines.Register(ctx, biz.RegisterInput{
 		MAC: req.GetMac(), Name: req.GetName(), Firmware: biz.Firmware(req.GetFirmware()),
 		ProfileID: req.GetProfileId(), ReservationIP: req.GetReservationIp(), Notes: req.GetNotes(),
-		NetworkConfig: network,
+		NetworkConfig: network, InstallNetwork: installNetworkFromProto(req.GetInstallNetwork()),
 	})
 	if err != nil {
 		return nil, mapErr(err)
@@ -149,6 +166,10 @@ func (s *MachineService) UpdateMachine(ctx context.Context, req *v1.UpdateMachin
 			return nil, err
 		}
 		up.NetworkConfig = &network
+	}
+	if req.InstallNetwork != nil {
+		installNet := installNetworkFromProto(req.GetInstallNetwork())
+		up.InstallNetwork = &installNet
 	}
 	m, err := s.machines.Update(ctx, req.GetId(), up)
 	if err != nil {

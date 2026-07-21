@@ -23,7 +23,7 @@ func NewProfileRepo(d *Data) *ProfileRepo { return &ProfileRepo{data: d} }
 const profileCols = `p.id, p.name, p.version, p.ubuntu_release, p.storage_layout,
 	p.network_config, p.packages, p.ssh_authorized_keys, coalesce(p.user_data_template,''),
 	p.late_commands, p.kernel_cmdline_extra, p.keyboard_layout, p.keyboard_variant,
-	p.locale, p.timezone, p.install_username, p.install_password_hash,
+	p.locale, p.timezone, p.install_username, p.install_password_hash, p.default_dns,
 	p.created_at, p.updated_at,
 	(SELECT count(*) FROM machines m WHERE m.profile_id = p.id)`
 
@@ -33,7 +33,7 @@ func scanProfile(row pgx.Row) (*biz.Profile, error) {
 	err := row.Scan(&p.ID, &p.Name, &p.Version, &p.UbuntuRelease, &storage,
 		&network, &p.Packages, &p.SSHAuthorizedKeys, &p.UserDataTemplate,
 		&p.LateCommands, &p.KernelCmdlineExtra, &p.KeyboardLayout, &p.KeyboardVariant,
-		&p.Locale, &p.Timezone, &p.InstallUsername, &p.InstallPasswordHash,
+		&p.Locale, &p.Timezone, &p.InstallUsername, &p.InstallPasswordHash, &p.DefaultDNS,
 		&p.CreatedAt, &p.UpdatedAt, &p.AssignedMachines)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, biz.ErrEntityNotFound
@@ -93,14 +93,15 @@ func (r *ProfileRepo) Create(ctx context.Context, p *biz.Profile) (*biz.Profile,
 	created, err := scanProfile(r.data.Pool.QueryRow(ctx,
 		`INSERT INTO profiles (name, ubuntu_release, storage_layout, network_config,
 		   packages, ssh_authorized_keys, user_data_template, late_commands, kernel_cmdline_extra,
-		   keyboard_layout, keyboard_variant, locale, timezone, install_username, install_password_hash)
-		 VALUES ($1, $2::ubuntu_release, $3, $4, $5, $6, NULLIF($7,''), $8, $9, $10, $11, $12, $13, $14, $15)
+		   keyboard_layout, keyboard_variant, locale, timezone, install_username, install_password_hash,
+		   default_dns)
+		 VALUES ($1, $2::ubuntu_release, $3, $4, $5, $6, NULLIF($7,''), $8, $9, $10, $11, $12, $13, $14, $15, $16)
 		 RETURNING `+profileColsSelf,
 		p.Name, string(p.UbuntuRelease), storage, network, orEmptySlice(p.Packages),
 		p.SSHAuthorizedKeys, p.UserDataTemplate, orEmptySlice(p.LateCommands),
 		p.KernelCmdlineExtra, defaultStr(p.KeyboardLayout, "us"), p.KeyboardVariant,
 		defaultStr(p.Locale, "en_US.UTF-8"), p.Timezone,
-		p.InstallUsername, p.InstallPasswordHash))
+		p.InstallUsername, p.InstallPasswordHash, orEmptySlice(p.DefaultDNS)))
 	if err != nil {
 		return nil, wrapConstraint(err, map[string]string{
 			"profiles_name_key": "profile name already in use",
@@ -138,7 +139,7 @@ func (r *ProfileRepo) Update(ctx context.Context, p *biz.Profile) (*biz.Profile,
 		   ssh_authorized_keys = $7, user_data_template = NULLIF($8,''),
 		   late_commands = $9, kernel_cmdline_extra = $10,
 		   keyboard_layout = $11, keyboard_variant = $12, locale = $13, timezone = $14,
-		   install_username = $15, install_password_hash = $16,
+		   install_username = $15, install_password_hash = $16, default_dns = $17,
 		   updated_at = now()
 		 WHERE id = $1 RETURNING `+profileColsSelf,
 		p.ID, p.Version, string(p.UbuntuRelease), storage, network,
@@ -146,7 +147,7 @@ func (r *ProfileRepo) Update(ctx context.Context, p *biz.Profile) (*biz.Profile,
 		orEmptySlice(p.LateCommands), p.KernelCmdlineExtra,
 		defaultStr(p.KeyboardLayout, "us"), p.KeyboardVariant,
 		defaultStr(p.Locale, "en_US.UTF-8"), p.Timezone,
-		p.InstallUsername, p.InstallPasswordHash))
+		p.InstallUsername, p.InstallPasswordHash, orEmptySlice(p.DefaultDNS)))
 	if err != nil {
 		return nil, wrapConstraint(err, map[string]string{
 			"profiles_name_key": "profile name already in use"})
@@ -177,7 +178,7 @@ func (r *ProfileRepo) Delete(ctx context.Context, id string) error {
 const profileColsSelf = `id, name, version, ubuntu_release, storage_layout,
 	network_config, packages, ssh_authorized_keys, coalesce(user_data_template,''),
 	late_commands, kernel_cmdline_extra, keyboard_layout, keyboard_variant,
-	locale, timezone, install_username, install_password_hash,
+	locale, timezone, install_username, install_password_hash, default_dns,
 	created_at, updated_at, 0::bigint`
 
 // defaultStr returns fallback when s is empty.

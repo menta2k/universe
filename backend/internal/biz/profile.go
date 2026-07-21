@@ -34,6 +34,7 @@ type Profile struct {
 	Timezone           string // optional IANA tz, e.g. "Europe/Sofia"
 	StorageLayout      StorageLayout
 	NetworkConfig      map[string]any
+	DefaultDNS         []string
 	Packages           []string
 	SSHAuthorizedKeys  []string
 	UserDataTemplate   string
@@ -102,6 +103,7 @@ type ProfileInput struct {
 	Timezone           string
 	StorageLayout      StorageLayout
 	NetworkConfig      map[string]any
+	DefaultDNS         []string
 	Packages           []string
 	SSHAuthorizedKeys  []string
 	UserDataTemplate   string
@@ -191,7 +193,7 @@ func (in *ProfileInput) toProfile() *Profile {
 		KeyboardLayout: in.KeyboardLayout, KeyboardVariant: in.KeyboardVariant,
 		Locale: in.Locale, Timezone: in.Timezone,
 		StorageLayout: in.StorageLayout,
-		NetworkConfig: in.NetworkConfig, Packages: in.Packages,
+		NetworkConfig: in.NetworkConfig, DefaultDNS: in.DefaultDNS, Packages: in.Packages,
 		SSHAuthorizedKeys: in.SSHAuthorizedKeys, UserDataTemplate: in.UserDataTemplate,
 		LateCommands: in.LateCommands, KernelCmdlineExtra: in.KernelCmdlineExtra,
 		InstallUsername: in.InstallUsername,

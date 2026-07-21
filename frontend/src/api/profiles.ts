@@ -47,6 +47,8 @@ export interface ProfileInput {
   readonly password?: string
   /** Remove any stored password on update. */
   readonly clear_password?: boolean
+  /** Fallback DNS a machine's production network inherits. */
+  readonly default_dns: readonly string[]
 }
 
 export interface ProfilePreview {
@@ -73,6 +75,7 @@ interface WireProfile {
   readonly kernel_cmdline_extra?: string
   readonly install_username?: string
   readonly has_password?: boolean
+  readonly default_dns?: readonly string[]
   readonly created_at?: string
   readonly updated_at?: string
   readonly assigned_machines?: number | string
@@ -126,6 +129,7 @@ function normalizeProfile(wire: WireProfile): Profile {
     user_data_template: wire.user_data_template ?? null,
     late_commands: wire.late_commands ?? [],
     kernel_cmdline_extra: wire.kernel_cmdline_extra ?? '',
+    default_dns: wire.default_dns ?? [],
     install_username: wire.install_username ?? '',
     has_password: wire.has_password ?? false,
     created_at: wire.created_at ?? '',

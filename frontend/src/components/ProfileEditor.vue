@@ -29,6 +29,7 @@ interface ProfileFormState {
   ubuntu_release: UbuntuRelease
   keyboardLayout: string
   timezone: string
+  defaultDns: string
   storageMode: StorageMode
   storageCustom: string
   networkMode: NetworkMode
@@ -187,6 +188,7 @@ function emptyForm(): ProfileFormState {
     ubuntu_release: 'noble',
     keyboardLayout: 'us',
     timezone: '',
+    defaultDns: '',
     storageMode: 'lvm',
     storageCustom: '',
     networkMode: 'dhcp',
@@ -221,6 +223,7 @@ function fromProfile(profile: Profile): ProfileFormState {
     ubuntu_release: profile.ubuntu_release,
     keyboardLayout: profile.keyboard_layout || 'us',
     timezone: profile.timezone ?? '',
+    defaultDns: (profile.default_dns ?? []).join(', '),
     storageMode: profile.storage_layout.mode,
     storageCustom: profile.storage_layout.custom ?? '',
     packages: [...profile.packages],
@@ -389,6 +392,10 @@ function submit(): void {
     install_username: form.value.installUsername.trim(),
     ...(form.value.password.length > 0 ? { password: form.value.password } : {}),
     ...(form.value.clearPassword ? { clear_password: true } : {}),
+    default_dns: form.value.defaultDns
+      .split(/[,\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean),
     user_data_template: form.value.userDataTemplate.trim() || null,
     late_commands: form.value.lateCommands.map((c) => c.trim()).filter(Boolean),
     kernel_cmdline_extra: form.value.kernelCmdlineExtra.trim(),
@@ -507,6 +514,18 @@ defineExpose({ form, submit, localErrors })
               variant="outlined"
             />
           </div>
+          <v-text-field
+            v-model="form.defaultDns"
+            class="mt-3"
+            data-testid="field-default-dns"
+            hide-details="auto"
+            hint="Comma-separated. Used as the default for machines' production networks."
+            label="Default DNS servers"
+            persistent-hint
+            placeholder="1.1.1.1, 8.8.8.8"
+            prepend-inner-icon="mdi-dns-outline"
+            variant="outlined"
+          />
 
           <!-- 3. Access -->
           <div class="section-label mt-6">

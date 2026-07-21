@@ -107,6 +107,12 @@ func renderDefault(in Input) (string, error) {
 	for _, cmd := range in.Profile.LateCommands {
 		lateCommands = append(lateCommands, "curtin in-target -- "+cmd)
 	}
+	// Friendly production network (2-NIC pattern): write the target netplan via
+	// a late-command so the installer keeps its provisioning-NIC DHCP for NFS.
+	if in.Machine.InstallNetwork.IsSet() {
+		lateCommands = append(lateCommands,
+			productionNetworkLateCommand(in.Machine, productionDNS(in.Machine, in.Profile)))
+	}
 	report := in.reportURL()
 	lateCommands = append(lateCommands, "wget -qO- --post-data=status=ok "+report)
 
@@ -158,11 +164,16 @@ func renderDefault(in Input) (string, error) {
 	if len(in.Profile.Packages) > 0 {
 		ai["packages"] = in.Profile.Packages
 	}
-	// A per-machine network override takes precedence over the profile's, so
-	// machines sharing a profile can still get machine-specific networking.
-	if network := in.Machine.NetworkConfig; len(network) > 0 {
-		ai["network"] = network
-	} else if len(in.Profile.NetworkConfig) > 0 {
+	// Network precedence: a friendly production network is applied post-install
+	// (a late-command, above) and deliberately leaves the installer's network
+	// alone, so no `network:` section is emitted for it. Otherwise a per-machine
+	// raw override beats the profile's, which beats nothing.
+	switch {
+	case in.Machine.InstallNetwork.IsSet():
+		// handled by productionNetworkLateCommand; installer keeps default DHCP.
+	case len(in.Machine.NetworkConfig) > 0:
+		ai["network"] = in.Machine.NetworkConfig
+	case len(in.Profile.NetworkConfig) > 0:
 		ai["network"] = in.Profile.NetworkConfig
 	}
 	body, err := yaml.Marshal(map[string]any{"autoinstall": ai})
