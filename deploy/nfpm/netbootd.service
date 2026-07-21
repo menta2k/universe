@@ -9,12 +9,12 @@ Type=simple
 ExecStart=/usr/local/bin/netbootd -conf /etc/netbootd/netbootd.yaml
 Restart=on-failure
 RestartSec=5
-# DHCP (67/udp), TFTP (69/udp) and raw-socket broadcast answers need these;
-# everything else runs unprivileged.
-AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_RAW CAP_NET_ADMIN
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_RAW CAP_NET_ADMIN
-NoNewPrivileges=true
-ProtectSystem=full
+# DHCP (67/udp), TFTP (69/udp) and raw-socket broadcast answers need the NET_*
+# caps; CAP_SYS_ADMIN lets the NFS-root mode loop-mount the install ISO.
+AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_RAW CAP_NET_ADMIN CAP_SYS_ADMIN
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_RAW CAP_NET_ADMIN CAP_SYS_ADMIN
+# NoNewPrivileges must stay off: loop-mounting the ISO needs to gain the mount
+# privilege. ProtectSystem is relaxed to strict-off for the same reason (mounts).
 ProtectHome=true
 StateDirectory=netbootd
 

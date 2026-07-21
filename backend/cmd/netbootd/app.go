@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/menta2k/universe/backend/internal/netboot/bootfiles"
 	"github.com/menta2k/universe/backend/internal/netboot/bootsrv"
 	"github.com/menta2k/universe/backend/internal/netboot/dhcp"
+	"github.com/menta2k/universe/backend/internal/netboot/nfs"
 	"github.com/menta2k/universe/backend/internal/netboot/tftp"
 	"github.com/menta2k/universe/backend/internal/server"
 	"github.com/menta2k/universe/backend/internal/service"
@@ -41,6 +43,13 @@ type app struct {
 	streamer   *server.EventStreamer
 	dhcpConfig *biz.DhcpConfigUsecase
 	bootFiles  *bootfiles.Fetcher
+
+	// NFS-root mode (low-memory netboot): loop-mount each release ISO under
+	// nfsDir/<release> and export nfsDir over NFSv3.
+	nfsSrv      *nfs.Server
+	artifacts   *data.ArtifactStore
+	nfsDir      string
+	nfsReleases []string
 }
 
 func newApp(ctx context.Context, cfg *conf.Config) (*app, func(), error) {
@@ -126,14 +135,35 @@ func newApp(ctx context.Context, cfg *conf.Config) (*app, func(), error) {
 	tftpSrv := tftp.NewServer(data.NewTFTPFileSource(artifactStore), data.NewTransferLogger(d), log)
 	tokens := bootsrv.NewTokenStore(d.Valkey, cfg.Netboot.SeedTokenTTL.Duration())
 	bootSrv := bootsrv.NewServer(cfg.Server.ExternalBootURL, bootFacade, artifactStore,
-		tokens, bootsrv.NewOneTimeCredentialMinter(), events, log, cfg.BootFiles.ServeISO)
+		tokens, bootsrv.NewOneTimeCredentialMinter(), events, log, bootsrv.BootOptions{
+			ServeISO:    cfg.BootFiles.ServeISO,
+			NFSRoot:     cfg.BootFiles.NFSRoot,
+			NFSServerIP: hostIP(cfg.Server.ExternalBootURL),
+		})
+
+	var nfsSrv *nfs.Server
+	nfsDir := filepath.Join(cfg.Artifacts.Root, "nfs")
+	if cfg.BootFiles.NFSRoot {
+		nfsSrv = nfs.New(nfsDir, log)
+	}
 
 	return &app{
 		cfg: cfg, log: log,
 		httpSrv: httpSrv, grpcSrv: grpcSrv, tftpSrv: tftpSrv, bootSrv: bootSrv,
 		dhcpCtl: dhcpCtl, sweeper: sweeper, streamer: streamer, dhcpConfig: dhcpConfig,
 		bootFiles: bootFileFetcher,
+		nfsSrv:    nfsSrv, artifacts: artifactStore, nfsDir: nfsDir,
+		nfsReleases: configuredReleases(cfg),
 	}, cleanup, nil
+}
+
+// configuredReleases returns the release codenames to prepare, matching the
+// boot-file fetcher's default (noble + jammy) when none are configured.
+func configuredReleases(cfg *conf.Config) []string {
+	if len(cfg.BootFiles.Releases) > 0 {
+		return cfg.BootFiles.Releases
+	}
+	return []string{"noble", "jammy"}
 }
 
 // bootFilesConfig maps the file config onto the fetcher's typed config.
@@ -224,8 +254,64 @@ func (a *app) start(ctx context.Context, g *errgroup.Group) {
 		g.Go(func() error {
 			a.log.Info("boot-file auto-fetch starting")
 			a.bootFiles.EnsureConfigured(ctx)
+			// NFS-root mode: once each release ISO is fetched, loop-mount it so
+			// the NFS export exposes the extracted tree.
+			if a.cfg.BootFiles.NFSRoot {
+				a.mountNFSReleases(ctx)
+			}
 			return nil
 		})
+	}
+
+	// NFS server for low-memory netboot (netboot=nfs). Exports nfsDir; the
+	// per-release ISO mounts appear under it as machines are fetched.
+	if a.nfsSrv != nil {
+		g.Go(func() error {
+			if err := a.nfsSrv.ListenAndServe(a.nfsAddr()); err != nil && ctx.Err() == nil {
+				return fmt.Errorf("nfs: %w", err)
+			}
+			return nil
+		})
+		g.Go(func() error {
+			<-ctx.Done()
+			a.unmountNFSReleases()
+			return a.nfsSrv.Shutdown(context.Background())
+		})
+	}
+}
+
+// nfsAddr returns the configured NFS listen address, defaulting to :2049.
+func (a *app) nfsAddr() string {
+	if a.cfg.BootFiles.NFSAddr != "" {
+		return a.cfg.BootFiles.NFSAddr
+	}
+	return ":2049"
+}
+
+// mountNFSReleases loop-mounts each configured release's ISO under nfsDir so
+// casper can NFS-mount the extracted tree. Missing/unfetched ISOs are skipped.
+func (a *app) mountNFSReleases(ctx context.Context) {
+	for _, rel := range a.nfsReleases {
+		art, err := a.artifacts.GetByFilename(ctx, rel+".iso")
+		if err != nil {
+			a.log.Warn("nfs: iso not available for release, skipping", "release", rel, "err", err)
+			continue
+		}
+		mountpoint := filepath.Join(a.nfsDir, rel)
+		if err := nfs.MountISO(art.Path, mountpoint); err != nil {
+			a.log.Error("nfs: mount iso failed", "release", rel, "err", err)
+			continue
+		}
+		a.log.Info("nfs: iso mounted", "release", rel, "mountpoint", mountpoint)
+	}
+}
+
+// unmountNFSReleases unmounts every release mount created for NFS export.
+func (a *app) unmountNFSReleases() {
+	for _, rel := range a.nfsReleases {
+		if err := nfs.Unmount(filepath.Join(a.nfsDir, rel)); err != nil {
+			a.log.Error("nfs: unmount failed", "release", rel, "err", err)
+		}
 	}
 }
 

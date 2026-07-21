@@ -105,7 +105,16 @@ type BootFiles struct {
 	// ServeISO makes the daemon also fetch + serve the full install ISO and
 	// point casper at it (url=) so the installer's root filesystem loads over
 	// HTTP. Needed for Ubuntu live-server installs on networks without media.
+	// url=<iso> loads the whole ISO into RAM (needs ~12 GB+); prefer NFSRoot
+	// for memory-constrained targets.
 	ServeISO bool `yaml:"serve_iso"`
+	// NFSRoot fetches the ISO, loop-mounts it, and exports the tree over NFS so
+	// casper mounts the squashfs live (paged, low memory: ~4 GB targets work)
+	// via netboot=nfs instead of url=<iso>. Requires the daemon to run as root
+	// (CAP_SYS_ADMIN) to loop-mount. Takes precedence over ServeISO.
+	NFSRoot bool `yaml:"nfs_root"`
+	// NFSAddr is the NFSv3 listen address (default ":2049").
+	NFSAddr string `yaml:"nfs_addr"`
 	// Releases to ensure (defaults to noble + jammy when empty).
 	Releases []string `yaml:"releases"`
 	// ISOURLs optionally overrides the ISO location per release codename

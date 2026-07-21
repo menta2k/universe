@@ -44,3 +44,6 @@ deploy/nfpm/out/
 # Playwright artifacts
 frontend/test-results/
 frontend/playwright-report/
+
+# Local debug screenshots
+/*.png

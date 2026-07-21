@@ -48,11 +48,22 @@ boot_files:
   # requests, not the full ISO). Fetched files are stored as artifacts and
   # reused, so later starts are no-ops. Leave off to upload boot files manually.
   auto_fetch: true
-  # Also fetch + serve the full install ISO and point casper at it (url=) so
-  # the live installer's root filesystem loads over HTTP. Required for Ubuntu
-  # live-server installs on networks without local media — without it the
-  # installer fails with "no medium found". Stores the full ISO once (~3 GB).
-  serve_iso: true
+  # Serve the installer root filesystem so live-server installs work on
+  # networks without local media. Two mutually-exclusive delivery methods:
+  #
+  #   serve_iso: casper downloads the whole ISO into RAM (url=). Simple, but the
+  #     target VM needs ~12-16 GB RAM or cloud-init gets OOM-killed and the
+  #     install drops to the interactive prompt.
+  #
+  #   nfs_root: the daemon loop-mounts the ISO and exports it over NFS; casper
+  #     mounts the squashfs live (paged) via netboot=nfs. Low memory — 4 GB
+  #     targets install fine. Requires netbootd to run as root with CAP_SYS_ADMIN
+  #     to loop-mount (the shipped systemd unit grants it). Takes precedence over
+  #     serve_iso when both are set.
+  serve_iso: false
+  nfs_root: true
+  # NFS listen address (default :2049). Reachable from the provisioning segment.
+  # nfs_addr: ":2049"
   # Releases to ensure (defaults to noble + jammy when omitted).
   releases: ["noble"]
   # Optional per-release ISO override for mirrors / air-gapped networks:

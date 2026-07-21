@@ -36,7 +36,7 @@ func (f fakeArtifacts) Open(_ context.Context, a *biz.Artifact) (io.ReadCloser, 
 func TestIPXEScriptInjectsISOURLWhenServing(t *testing.T) {
 	dec := &biz.BootDecision{Profile: &biz.Profile{UbuntuRelease: biz.ReleaseNoble}}
 
-	on := &Server{externalURL: "http://boot.example:8082", serveISO: true}
+	on := &Server{externalURL: "http://boot.example:8082", opts: BootOptions{ServeISO: true}}
 	script := on.ipxeScript(dec, "autoinstall ds=nocloud;s=http://x/")
 	// casper needs the .iso-suffixed URL, ip=dhcp, and the ramdisk root.
 	if !strings.Contains(script, "url=http://boot.example:8082/boot/iso/noble.iso") {
@@ -53,9 +53,29 @@ func TestIPXEScriptInjectsISOURLWhenServing(t *testing.T) {
 		t.Errorf("autoinstall seed lost, got:\n%s", script)
 	}
 
-	off := &Server{externalURL: "http://boot.example:8082", serveISO: false}
+	off := &Server{externalURL: "http://boot.example:8082", opts: BootOptions{ServeISO: false}}
 	if s := off.ipxeScript(dec, "autoinstall"); strings.Contains(s, "url=") {
 		t.Errorf("iso url must not appear when serveISO is off, got:\n%s", s)
+	}
+}
+
+func TestIPXEScriptNFSRootCmdline(t *testing.T) {
+	dec := &biz.BootDecision{Profile: &biz.Profile{UbuntuRelease: biz.ReleaseNoble}}
+	s := &Server{externalURL: "http://boot.example:8082",
+		opts: BootOptions{NFSRoot: true, ServeISO: true, NFSServerIP: "10.1.114.3"}}
+	script := s.ipxeScript(dec, "autoinstall ds=nocloud;s=http://x/")
+
+	// NFS takes precedence over ServeISO: no url=/ram0, yes netboot=nfs.
+	if strings.Contains(script, "url=") || strings.Contains(script, "root=/dev/ram0") {
+		t.Errorf("NFS mode must not use the url=/ramdisk path, got:\n%s", script)
+	}
+	for _, want := range []string{
+		"netboot=nfs", "boot=casper", "nfsroot=10.1.114.3:/noble",
+		"ip=dhcp", "autoinstall ds=nocloud;s=http://x/", "network-config=disabled",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("NFS cmdline missing %q, got:\n%s", want, script)
+		}
 	}
 }
 

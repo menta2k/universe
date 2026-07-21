@@ -41,20 +41,33 @@ type Server struct {
 	events      *biz.EventRecorder
 	log         *slog.Logger
 	httpSrv     *http.Server
-	// serveISO makes the daemon serve the install ISO and add url=/ip=dhcp to
-	// the kernel cmdline so casper fetches its root filesystem over HTTP.
-	serveISO bool
+	opts        BootOptions
+}
+
+// BootOptions selects how the installer's root filesystem is delivered.
+// NFSRoot (low memory) takes precedence over ServeISO (url=, RAM-heavy); with
+// neither, only registered machines with pre-uploaded artifacts boot.
+type BootOptions struct {
+	// ServeISO adds root=/dev/ram0 ... url=<iso> so casper downloads the whole
+	// ISO into RAM.
+	ServeISO bool
+	// NFSRoot adds netboot=nfs boot=casper nfsroot=<ip>:/<release> so casper
+	// mounts the squashfs live over NFS (low memory).
+	NFSRoot bool
+	// NFSServerIP is the address casper mounts the NFS root from (the
+	// provisioning interface IP).
+	NFSServerIP string
 }
 
 func NewServer(
 	externalURL string, boot BootUsecase, artifacts ArtifactSource,
 	tokens *TokenStore, creds CredentialMinter, events *biz.EventRecorder, log *slog.Logger,
-	serveISO bool,
+	opts BootOptions,
 ) *Server {
 	return &Server{
 		externalURL: strings.TrimRight(externalURL, "/"),
 		boot:        boot, artifacts: artifacts, tokens: tokens,
-		creds: creds, events: events, log: log, serveISO: serveISO,
+		creds: creds, events: events, log: log, opts: opts,
 	}
 }
 
@@ -134,13 +147,23 @@ func (s *Server) handleIPXE(w http.ResponseWriter, r *http.Request) {
 func (s *Server) ipxeScript(dec *biz.BootDecision, cmdline string) string {
 	base := s.externalURL
 	rel := string(dec.Profile.UbuntuRelease)
-	// When serving the ISO, prepend the parameters casper needs to download and
-	// loop-mount the live filesystem over HTTP (per Ubuntu's netboot docs):
-	//   root=/dev/ram0 ramdisk_size=... engages the ramdisk boot,
-	//   ip=dhcp brings networking up, and url=<...>.iso must end in .iso so
-	//   casper recognises it as a fetchable image. Without these it ignores the
-	//   network source and fails with "no medium found".
-	if s.serveISO {
+	switch {
+	case s.opts.NFSRoot:
+		// Low-memory path: casper mounts the squashfs live over NFS (paged) via
+		// netboot=nfs, instead of buffering the whole ISO in RAM. The release
+		// ISO is loop-mounted under the NFS export at /<release>.
+		// network-config=disabled avoids cloud-init reconfiguring the NIC used
+		// for the NFS mount mid-install.
+		cmdline = fmt.Sprintf(
+			"netboot=nfs boot=casper nfsroot=%s:/%s ip=dhcp %s network-config=disabled",
+			s.opts.NFSServerIP, rel, cmdline)
+	case s.opts.ServeISO:
+		// When serving the ISO, prepend the parameters casper needs to download
+		// and loop-mount the live filesystem over HTTP (per Ubuntu's netboot
+		// docs): root=/dev/ram0 ramdisk_size=... engages the ramdisk boot,
+		// ip=dhcp brings networking up, and url=<...>.iso must end in .iso so
+		// casper recognises it as a fetchable image. Loads the whole ISO into
+		// RAM, so the target needs ~12 GB+.
 		cmdline = fmt.Sprintf(
 			"root=/dev/ram0 ramdisk_size=1500000 ip=dhcp url=%s/boot/iso/%s.iso %s",
 			base, rel, cmdline)
