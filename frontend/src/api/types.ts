@@ -28,6 +28,8 @@ export interface Machine {
   readonly reservation_ip: string | null
   readonly provision_state: ProvisionState
   readonly notes: string
+  /** Per-machine netplan override as a JSON string; empty means "use the profile's". */
+  readonly network_config: string
   readonly created_at: string
   readonly updated_at: string
   readonly active_session_id: string | null

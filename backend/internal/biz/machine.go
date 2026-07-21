@@ -41,10 +41,13 @@ type Machine struct {
 	MAC             string
 	Name            string
 	Firmware        Firmware
-	ProfileID       string
-	ReservationIP   string
-	State           ProvisionState
-	Notes           string
+	ProfileID     string
+	ReservationIP string
+	State         ProvisionState
+	Notes         string
+	// NetworkConfig, when non-empty, is a per-machine netplan that overrides the
+	// assigned profile's network for this machine during install.
+	NetworkConfig   map[string]any
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	ActiveSessionID string
@@ -59,6 +62,9 @@ type MachineUpdate struct {
 	Notes         *string
 	Firmware      *Firmware
 	State         *ProvisionState
+	// NetworkConfig replaces the per-machine network override when non-nil; an
+	// empty map clears it (falls back to the profile's network).
+	NetworkConfig *map[string]any
 }
 
 // MachineFilter narrows List queries.
@@ -127,6 +133,7 @@ type RegisterInput struct {
 	ProfileID     string
 	ReservationIP string
 	Notes         string
+	NetworkConfig map[string]any
 }
 
 // ValidationError carries per-field messages to the API layer.
@@ -189,7 +196,7 @@ func (u *MachineUsecase) Register(ctx context.Context, in RegisterInput) (*Machi
 	m, err := u.machines.Create(ctx, &Machine{
 		MAC: in.MAC, Name: in.Name, Firmware: fw,
 		ProfileID: in.ProfileID, ReservationIP: in.ReservationIP,
-		State: state, Notes: in.Notes,
+		State: state, Notes: in.Notes, NetworkConfig: in.NetworkConfig,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create machine: %w", err)
@@ -278,10 +285,14 @@ func (u *MachineUsecase) Cancel(ctx context.Context, machineID string) (*Machine
 	if err := u.sessions.Finish(ctx, sess.ID, SessionFailed, "cancelled", nil); err != nil {
 		return nil, fmt.Errorf("cancel session: %w", err)
 	}
-	failed := StateFailed
-	updated, err := u.machines.Update(ctx, m.ID, MachineUpdate{State: &failed})
+	// Unarming returns the machine to a clean, editable, re-armable state rather
+	// than "failed" (which is reserved for real install failures), so an
+	// operator can adjust its config — e.g. the per-machine network override —
+	// and provision again.
+	ready := StateReady
+	updated, err := u.machines.Update(ctx, m.ID, MachineUpdate{State: &ready})
 	if err != nil {
-		return nil, fmt.Errorf("mark failed: %w", err)
+		return nil, fmt.Errorf("mark ready: %w", err)
 	}
 	u.events.Record(ctx, Event{
 		SessionID: sess.ID, MachineMAC: m.MAC,

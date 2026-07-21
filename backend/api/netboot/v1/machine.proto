@@ -68,6 +68,7 @@ message Machine {
   google.protobuf.Timestamp created_at = 9;
   google.protobuf.Timestamp updated_at = 10;
   string active_session_id = 11; // empty when no active session
+  string network_config = 12;    // JSON netplan override; empty => use profile's
 }
 
 message ListMachinesRequest {
@@ -93,6 +94,7 @@ message CreateMachineRequest {
   string profile_id = 4;
   string reservation_ip = 5;
   string notes = 6;
+  string network_config = 7; // JSON netplan override; empty => use profile's
 }
 
 message UpdateMachineRequest {
@@ -101,6 +103,7 @@ message UpdateMachineRequest {
   optional string profile_id = 3;
   optional string reservation_ip = 4;
   optional string notes = 5;
+  optional string network_config = 6; // JSON netplan override; "" clears it
 }
 
 message UnknownBoot {

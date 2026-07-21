@@ -8,6 +8,14 @@ import { computed, ref, watch } from 'vue'
 
 import { listProfiles } from '../api/profiles'
 import type { Firmware, Profile } from '../api/types'
+import {
+  type NicForm,
+  defaultNic,
+  emptyNic,
+  parseNetworkConfig,
+  serializeNics,
+  validateNics,
+} from '../utils/netplan'
 
 export type MachineDialogMode = 'create' | 'edit' | 'register-unknown'
 
@@ -18,7 +26,12 @@ export interface MachineFormValues {
   readonly profile_id: string
   readonly reservation_ip: string
   readonly notes: string
+  /** Per-machine netplan override as a JSON string; empty means "inherit profile". */
+  readonly network_config: string
 }
+
+/** Machine network override modes: inherit the profile, or override per-NIC / raw. */
+type MachineNetworkMode = 'inherit' | 'static' | 'advanced'
 
 /** Mutable local edit state; v-select `clearable` may set profile_id to null. */
 interface MachineFormState {
@@ -28,6 +41,9 @@ interface MachineFormState {
   profile_id: string | null
   reservation_ip: string
   notes: string
+  networkMode: MachineNetworkMode
+  nics: NicForm[]
+  networkAdvanced: string
 }
 
 const props = defineProps<{
@@ -54,8 +70,57 @@ const FIRMWARE_OPTIONS: readonly { title: string; value: Firmware }[] = [
   { title: 'Unknown', value: 'unknown' },
 ]
 
+const NETWORK_MODE_OPTIONS: readonly { title: string; value: MachineNetworkMode }[] = [
+  { title: 'Inherit from profile', value: 'inherit' },
+  { title: 'Override interfaces', value: 'static' },
+  { title: 'Advanced (netplan JSON)', value: 'advanced' },
+]
+
 function emptyForm(): MachineFormState {
-  return { mac: '', name: '', firmware: 'uefi_x64', profile_id: '', reservation_ip: '', notes: '' }
+  return {
+    mac: '',
+    name: '',
+    firmware: 'uefi_x64',
+    profile_id: '',
+    reservation_ip: '',
+    notes: '',
+    networkMode: 'inherit',
+    nics: [defaultNic()],
+    networkAdvanced: '',
+  }
+}
+
+/** Builds edit state from initial values, parsing the network override string. */
+function formFromInitial(initial?: Partial<MachineFormValues>): MachineFormState {
+  const base = emptyForm()
+  if (!initial) return base
+  const { network_config, ...rest } = initial
+  const state: MachineFormState = { ...base, ...rest }
+  const raw = (network_config ?? '').trim()
+  if (raw) {
+    try {
+      const parsed = parseNetworkConfig(JSON.parse(raw))
+      if (parsed.mode === 'static') {
+        state.networkMode = 'static'
+        state.nics = parsed.nics.length > 0 ? parsed.nics : [defaultNic()]
+      } else if (parsed.mode === 'advanced') {
+        state.networkMode = 'advanced'
+        state.networkAdvanced = parsed.raw
+      }
+      // parsed.mode === 'dhcp' only for an empty object, i.e. no real override.
+    } catch {
+      state.networkMode = 'advanced'
+      state.networkAdvanced = raw
+    }
+  }
+  return state
+}
+
+/** Serialises the network override back to a JSON string ('' = inherit). */
+function serializeNetworkOverride(state: MachineFormState): string {
+  if (state.networkMode === 'inherit') return ''
+  if (state.networkMode === 'advanced') return state.networkAdvanced.trim()
+  return serializeNics(state.nics)
 }
 
 const form = ref<MachineFormState>(emptyForm())
@@ -89,6 +154,15 @@ const localErrors = computed<Readonly<Record<string, string>>>(() => {
     errors.reservation_ip = 'Enter a valid IPv4 address'
   if (isRegisterUnknown.value && !form.value.profile_id)
     errors.profile_id = 'Profile is required when registering from an unknown boot'
+  if (form.value.networkMode === 'static') {
+    Object.assign(errors, validateNics(form.value.nics))
+  } else if (form.value.networkMode === 'advanced' && form.value.networkAdvanced.trim()) {
+    try {
+      JSON.parse(form.value.networkAdvanced)
+    } catch {
+      errors.network_config = 'Network override must be valid JSON'
+    }
+  }
   return errors
 })
 
@@ -116,7 +190,7 @@ watch(
   (open) => {
     if (!open) return
     submitted.value = false
-    form.value = { ...emptyForm(), ...props.initial }
+    form.value = formFromInitial(props.initial)
     void loadProfiles()
   },
   { immediate: true },
@@ -124,6 +198,18 @@ watch(
 
 function close(): void {
   emit('update:modelValue', false)
+}
+
+function addNic(): void {
+  form.value.nics = [...form.value.nics, emptyNic()]
+}
+
+function removeNic(index: number): void {
+  form.value.nics = form.value.nics.filter((_, i) => i !== index)
+}
+
+function updateNic(index: number, patch: Partial<NicForm>): void {
+  form.value.nics = form.value.nics.map((nic, i) => (i === index ? { ...nic, ...patch } : nic))
 }
 
 function submit(): void {
@@ -136,6 +222,7 @@ function submit(): void {
     profile_id: form.value.profile_id ?? '',
     reservation_ip: form.value.reservation_ip.trim(),
     notes: form.value.notes.trim(),
+    network_config: serializeNetworkOverride(form.value),
   })
 }
 
@@ -204,10 +291,115 @@ defineExpose({ form, submit, localErrors })
             />
             <v-textarea
               v-model="form.notes"
+              class="mb-2"
               data-testid="field-notes"
               :error-messages="fieldErrors('notes')"
               label="Notes"
               rows="2"
+              variant="outlined"
+            />
+
+            <!-- Per-machine network override -->
+            <v-select
+              v-model="form.networkMode"
+              class="mb-2"
+              data-testid="field-network-mode"
+              hide-details="auto"
+              :items="NETWORK_MODE_OPTIONS"
+              label="Network"
+              variant="outlined"
+            />
+            <div v-if="form.networkMode !== 'inherit'" class="text-caption text-medium-emphasis mb-2">
+              Overrides the profile's network for this machine only.
+            </div>
+
+            <template v-if="form.networkMode === 'static'">
+              <div
+                v-for="(nic, index) in form.nics"
+                :key="`nic-${index}`"
+                class="pa-3 mb-2 rounded border"
+              >
+                <div class="d-flex align-center ga-2 mb-2">
+                  <v-text-field
+                    class="flex-grow-1"
+                    density="compact"
+                    hide-details="auto"
+                    label="Interface (name or glob, e.g. en*)"
+                    :model-value="nic.name"
+                    variant="outlined"
+                    @update:model-value="updateNic(index, { name: $event })"
+                  />
+                  <v-switch
+                    color="primary"
+                    density="compact"
+                    hide-details
+                    label="DHCP"
+                    :model-value="nic.dhcp"
+                    @update:model-value="updateNic(index, { dhcp: !!$event })"
+                  />
+                  <v-btn
+                    :disabled="form.nics.length <= 1"
+                    icon="mdi-close"
+                    size="small"
+                    title="Remove interface"
+                    variant="text"
+                    @click="removeNic(index)"
+                  />
+                </div>
+                <template v-if="!nic.dhcp">
+                  <v-text-field
+                    class="mb-2"
+                    density="compact"
+                    :error-messages="fieldErrors(`nic_${index}_address`)"
+                    hide-details="auto"
+                    label="Address (CIDR, e.g. 10.0.0.5/24)"
+                    :model-value="nic.address"
+                    variant="outlined"
+                    @update:model-value="updateNic(index, { address: $event })"
+                  />
+                  <div class="d-flex ga-2">
+                    <v-text-field
+                      density="compact"
+                      :error-messages="fieldErrors(`nic_${index}_gateway`)"
+                      hide-details="auto"
+                      label="Gateway"
+                      :model-value="nic.gateway"
+                      variant="outlined"
+                      @update:model-value="updateNic(index, { gateway: $event })"
+                    />
+                    <v-text-field
+                      density="compact"
+                      hide-details="auto"
+                      label="DNS (comma-separated)"
+                      :model-value="nic.dns.join(', ')"
+                      variant="outlined"
+                      @update:model-value="
+                        updateNic(index, {
+                          dns: $event
+                            .split(/[,\s]+/)
+                            .map((s: string) => s.trim())
+                            .filter(Boolean),
+                        })
+                      "
+                    />
+                  </div>
+                </template>
+              </div>
+              <v-btn prepend-icon="mdi-plus" size="small" variant="tonal" @click="addNic">
+                Add interface
+              </v-btn>
+            </template>
+
+            <v-textarea
+              v-if="form.networkMode === 'advanced'"
+              v-model="form.networkAdvanced"
+              class="text-mono"
+              data-testid="field-network-advanced"
+              :error-messages="fieldErrors('network_config')"
+              hide-details="auto"
+              label="netplan JSON"
+              placeholder='{"version":2,"ethernets":{"en*":{"dhcp4":true}}}'
+              rows="4"
               variant="outlined"
             />
           </template>

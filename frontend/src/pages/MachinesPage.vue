@@ -97,6 +97,7 @@ function openEdit(machine: Machine): void {
     profile_id: machine.profile_id ?? '',
     reservation_ip: machine.reservation_ip ?? '',
     notes: machine.notes,
+    network_config: machine.network_config ?? '',
   }
   editingId.value = machine.id
   dialogServerErrors.value = {}
@@ -121,6 +122,7 @@ async function onDialogSave(values: MachineFormValues): Promise<void> {
         profile_id: values.profile_id,
         reservation_ip: values.reservation_ip,
         notes: values.notes,
+        network_config: values.network_config,
       })
     } else if (dialogMode.value === 'register-unknown') {
       await store.registerFromUnknown({
@@ -137,6 +139,7 @@ async function onDialogSave(values: MachineFormValues): Promise<void> {
         profile_id: values.profile_id || undefined,
         reservation_ip: values.reservation_ip || undefined,
         notes: values.notes || undefined,
+        network_config: values.network_config || undefined,
       })
     }
     dialogOpen.value = false

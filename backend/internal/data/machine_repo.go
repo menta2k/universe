@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -20,17 +21,24 @@ type MachineRepo struct {
 func NewMachineRepo(d *Data) *MachineRepo { return &MachineRepo{data: d} }
 
 const machineCols = `id, mac::text, name, firmware, coalesce(profile_id::text,''),
-	coalesce(host(reservation_ip),''), provision_state, notes, created_at, updated_at`
+	coalesce(host(reservation_ip),''), provision_state, notes, network_config,
+	created_at, updated_at`
 
 func scanMachine(row pgx.Row) (*biz.Machine, error) {
 	var m biz.Machine
+	var network []byte
 	err := row.Scan(&m.ID, &m.MAC, &m.Name, &m.Firmware, &m.ProfileID,
-		&m.ReservationIP, &m.State, &m.Notes, &m.CreatedAt, &m.UpdatedAt)
+		&m.ReservationIP, &m.State, &m.Notes, &network, &m.CreatedAt, &m.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, biz.ErrEntityNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("scan machine: %w", err)
+	}
+	if len(network) > 0 && string(network) != "{}" {
+		if err := json.Unmarshal(network, &m.NetworkConfig); err != nil {
+			return nil, fmt.Errorf("decode machine network config: %w", err)
+		}
 	}
 	return &m, nil
 }
@@ -90,11 +98,15 @@ func (r *MachineRepo) List(ctx context.Context, f biz.MachineFilter) ([]*biz.Mac
 }
 
 func (r *MachineRepo) Create(ctx context.Context, m *biz.Machine) (*biz.Machine, error) {
+	network, err := json.Marshal(orEmptyMap(m.NetworkConfig))
+	if err != nil {
+		return nil, fmt.Errorf("marshal machine network config: %w", err)
+	}
 	created, err := scanMachine(r.data.Pool.QueryRow(ctx,
-		`INSERT INTO machines (mac, name, firmware, profile_id, reservation_ip, provision_state, notes)
-		 VALUES ($1::macaddr, $2, $3, NULLIF($4,'')::uuid, NULLIF($5,'')::inet, $6, $7)
+		`INSERT INTO machines (mac, name, firmware, profile_id, reservation_ip, provision_state, notes, network_config)
+		 VALUES ($1::macaddr, $2, $3, NULLIF($4,'')::uuid, NULLIF($5,'')::inet, $6, $7, $8)
 		 RETURNING `+machineCols,
-		m.MAC, m.Name, string(m.Firmware), m.ProfileID, m.ReservationIP, string(m.State), m.Notes))
+		m.MAC, m.Name, string(m.Firmware), m.ProfileID, m.ReservationIP, string(m.State), m.Notes, network))
 	if err != nil {
 		return nil, wrapConstraint(err, map[string]string{
 			"machines_mac_key":            "mac already registered",
@@ -129,6 +141,13 @@ func (r *MachineRepo) Update(ctx context.Context, id string, u biz.MachineUpdate
 	}
 	if u.State != nil {
 		set = append(set, "provision_state = "+arg(string(*u.State))+"::provision_state")
+	}
+	if u.NetworkConfig != nil {
+		network, err := json.Marshal(orEmptyMap(*u.NetworkConfig))
+		if err != nil {
+			return nil, fmt.Errorf("marshal machine network config: %w", err)
+		}
+		set = append(set, "network_config = "+arg(network))
 	}
 	return scanMachine(r.data.Pool.QueryRow(ctx,
 		"UPDATE machines SET "+strings.Join(set, ", ")+" WHERE id = $1 RETURNING "+machineCols,

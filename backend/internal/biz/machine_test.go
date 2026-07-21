@@ -339,13 +339,15 @@ func TestProvisionLifecycle(t *testing.T) {
 		t.Errorf("profile version snapshot = %d, want 3", dec.Session.ProfileVersion)
 	}
 
-	// Cancel fails the session and machine.
+	// Cancel (unarm) finishes the session and returns the machine to a clean,
+	// re-armable "ready" state so its config can be edited before provisioning
+	// again.
 	cancelled, err := uc.Cancel(context.Background(), m.ID)
 	if err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
-	if cancelled.State != StateFailed {
-		t.Errorf("state after cancel = %s", cancelled.State)
+	if cancelled.State != StateReady {
+		t.Errorf("state after cancel = %s, want ready", cancelled.State)
 	}
 	if _, err := sessions.GetActiveByMachine(context.Background(), m.ID); !errors.Is(err, ErrEntityNotFound) {
 		t.Error("active session should be gone after cancel")

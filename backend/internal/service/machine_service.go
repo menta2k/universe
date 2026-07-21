@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -22,13 +23,34 @@ func NewMachineService(machines *biz.MachineUsecase) *MachineService {
 }
 
 func toMachineReply(m *biz.Machine) *v1.Machine {
+	network := ""
+	if len(m.NetworkConfig) > 0 {
+		if b, err := json.Marshal(m.NetworkConfig); err == nil {
+			network = string(b)
+		}
+	}
 	return &v1.Machine{
 		Id: m.ID, Mac: m.MAC, Name: m.Name, Firmware: string(m.Firmware),
 		ProfileId: m.ProfileID, ReservationIp: m.ReservationIP,
 		ProvisionState: string(m.State), Notes: m.Notes,
-		CreatedAt: timestamppb.New(m.CreatedAt), UpdatedAt: timestamppb.New(m.UpdatedAt),
+		NetworkConfig: network,
+		CreatedAt:     timestamppb.New(m.CreatedAt), UpdatedAt: timestamppb.New(m.UpdatedAt),
 		ActiveSessionId: m.ActiveSessionID,
 	}
+}
+
+// parseMachineNetwork decodes a JSON netplan override string into a map. Empty
+// or "{}" yields a nil map (no override / clear).
+func parseMachineNetwork(s string) (map[string]any, error) {
+	if s == "" || s == "{}" {
+		return nil, nil
+	}
+	var network map[string]any
+	if err := json.Unmarshal([]byte(s), &network); err != nil {
+		return nil, server.ErrValidation("invalid network_config JSON",
+			map[string]string{"network_config": err.Error()})
+	}
+	return network, nil
 }
 
 // mapErr converts biz/domain errors to typed API errors.
@@ -92,9 +114,14 @@ func (s *MachineService) GetMachine(ctx context.Context, req *v1.GetMachineReque
 }
 
 func (s *MachineService) CreateMachine(ctx context.Context, req *v1.CreateMachineRequest) (*v1.Machine, error) {
+	network, err := parseMachineNetwork(req.GetNetworkConfig())
+	if err != nil {
+		return nil, err
+	}
 	m, err := s.machines.Register(ctx, biz.RegisterInput{
 		MAC: req.GetMac(), Name: req.GetName(), Firmware: biz.Firmware(req.GetFirmware()),
 		ProfileID: req.GetProfileId(), ReservationIP: req.GetReservationIp(), Notes: req.GetNotes(),
+		NetworkConfig: network,
 	})
 	if err != nil {
 		return nil, mapErr(err)
@@ -115,6 +142,13 @@ func (s *MachineService) UpdateMachine(ctx context.Context, req *v1.UpdateMachin
 	}
 	if req.Notes != nil {
 		up.Notes = req.Notes
+	}
+	if req.NetworkConfig != nil {
+		network, err := parseMachineNetwork(req.GetNetworkConfig())
+		if err != nil {
+			return nil, err
+		}
+		up.NetworkConfig = &network
 	}
 	m, err := s.machines.Update(ctx, req.GetId(), up)
 	if err != nil {

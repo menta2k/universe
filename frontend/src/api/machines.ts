@@ -23,6 +23,8 @@ export interface CreateMachineInput {
   readonly profile_id?: string
   readonly reservation_ip?: string
   readonly notes?: string
+  /** Per-machine netplan override as a JSON string; empty uses the profile's. */
+  readonly network_config?: string
 }
 
 export interface UpdateMachineInput {
@@ -30,6 +32,8 @@ export interface UpdateMachineInput {
   readonly profile_id?: string
   readonly reservation_ip?: string
   readonly notes?: string
+  /** JSON netplan override; empty string clears it (falls back to the profile). */
+  readonly network_config?: string
 }
 
 export interface UnknownBoot {
@@ -124,13 +128,11 @@ export async function listUnknownBoots(page = 1, pageSize = 10): Promise<Unknown
   const data = await request<WireUnknownBootList>(`${BASE}/unknown`, {
     query: { page, page_size: pageSize },
   })
-  const boots = (data.boots ?? []).map(
-    (boot): UnknownBoot => ({
-      mac: boot.mac,
-      last_seen: boot.last_seen,
-      attempts: Number(boot.attempts ?? 0),
-    }),
-  )
+  const boots = (data.boots ?? []).map((boot): UnknownBoot => ({
+    mac: boot.mac,
+    last_seen: boot.last_seen,
+    attempts: Number(boot.attempts ?? 0),
+  }))
   return { boots, meta: normalizeMeta(data.meta, boots.length) }
 }
 

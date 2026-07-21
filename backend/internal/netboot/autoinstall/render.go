@@ -158,7 +158,11 @@ func renderDefault(in Input) (string, error) {
 	if len(in.Profile.Packages) > 0 {
 		ai["packages"] = in.Profile.Packages
 	}
-	if len(in.Profile.NetworkConfig) > 0 {
+	// A per-machine network override takes precedence over the profile's, so
+	// machines sharing a profile can still get machine-specific networking.
+	if network := in.Machine.NetworkConfig; len(network) > 0 {
+		ai["network"] = network
+	} else if len(in.Profile.NetworkConfig) > 0 {
 		ai["network"] = in.Profile.NetworkConfig
 	}
 	body, err := yaml.Marshal(map[string]any{"autoinstall": ai})

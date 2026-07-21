@@ -195,6 +195,45 @@ func TestRenderInstallIdentity(t *testing.T) {
 	})
 }
 
+func TestRenderMachineNetworkOverride(t *testing.T) {
+	profileNet := map[string]any{"version": 2, "ethernets": map[string]any{"eth0": map[string]any{"dhcp4": true}}}
+	machineNet := map[string]any{"version": 2, "ethernets": map[string]any{"eth0": map[string]any{"addresses": []any{"10.0.0.5/24"}}}}
+
+	t.Run("machine override wins over the profile network", func(t *testing.T) {
+		in := defaultInput()
+		in.Profile.NetworkConfig = profileNet
+		in.Machine.NetworkConfig = machineNet
+		ai := parseUserData(t, mustRender(t, in))
+		network, _ := ai["network"].(map[string]any)
+		eth, _ := network["ethernets"].(map[string]any)
+		eth0, _ := eth["eth0"].(map[string]any)
+		if _, isDHCP := eth0["dhcp4"]; isDHCP {
+			t.Errorf("machine override ignored; got profile network: %v", network)
+		}
+		if eth0["addresses"] == nil {
+			t.Errorf("machine static addresses missing: %v", network)
+		}
+	})
+
+	t.Run("no machine override falls back to the profile network", func(t *testing.T) {
+		in := defaultInput()
+		in.Profile.NetworkConfig = profileNet
+		ai := parseUserData(t, mustRender(t, in))
+		if _, ok := ai["network"].(map[string]any); !ok {
+			t.Errorf("profile network should be used when no machine override: %v", ai["network"])
+		}
+	})
+}
+
+func mustRender(t *testing.T, in Input) string {
+	t.Helper()
+	userData, _, err := Render(in)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	return userData
+}
+
 func TestRenderStorageModes(t *testing.T) {
 	tests := []struct {
 		name   string
