@@ -223,6 +223,32 @@ func TestRenderMachineNetworkOverride(t *testing.T) {
 			t.Errorf("profile network should be used when no machine override: %v", ai["network"])
 		}
 	})
+
+	// A raw override lands in the target as subiquity's 00-installer-config.yaml,
+	// which cloud-init's 50-cloud-init.yaml would override on the first boot just
+	// as it would the friendly production network's 00-netbootd.yaml.
+	t.Run("a raw override also disables cloud-init networking", func(t *testing.T) {
+		for name, mutate := range map[string]func(*Input){
+			"machine": func(in *Input) { in.Machine.NetworkConfig = machineNet },
+			"profile": func(in *Input) { in.Profile.NetworkConfig = profileNet },
+		} {
+			t.Run(name, func(t *testing.T) {
+				in := defaultInput()
+				mutate(&in)
+				late, _ := parseUserData(t, mustRender(t, in))["late-commands"].([]any)
+				assertCloudInitNetworkDisabled(t, late)
+			})
+		}
+	})
+
+	t.Run("no network config leaves cloud-init alone", func(t *testing.T) {
+		late, _ := parseUserData(t, mustRender(t, defaultInput()))["late-commands"].([]any)
+		for _, c := range late {
+			if s, _ := c.(string); strings.Contains(s, cloudInitNoNetworkPath) {
+				t.Errorf("must not disable cloud-init networking when nothing pins the network: %s", s)
+			}
+		}
+	})
 }
 
 func mustRender(t *testing.T, in Input) string {

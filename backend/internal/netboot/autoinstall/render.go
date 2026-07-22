@@ -107,11 +107,25 @@ func renderDefault(in Input) (string, error) {
 	for _, cmd := range in.Profile.LateCommands {
 		lateCommands = append(lateCommands, "curtin in-target -- "+cmd)
 	}
-	// Friendly production network (2-NIC pattern): write the target netplan via
-	// a late-command so the installer keeps its provisioning-NIC DHCP for NFS.
-	if in.Machine.InstallNetwork.IsSet() {
+	// Network precedence: a friendly production network (2-NIC pattern) is
+	// applied post-install via a late-command, so the installer keeps its
+	// provisioning-NIC DHCP for NFS and no `network:` section is emitted for it.
+	// Otherwise a per-machine raw override beats the profile's, which beats
+	// nothing — those go through the installer's `network:` section as usual.
+	var network map[string]any
+	switch {
+	case in.Machine.InstallNetwork.IsSet():
 		lateCommands = append(lateCommands,
 			productionNetworkLateCommand(in.Machine, productionDNS(in.Machine, in.Profile)))
+	case len(in.Machine.NetworkConfig) > 0:
+		network = in.Machine.NetworkConfig
+	case len(in.Profile.NetworkConfig) > 0:
+		network = in.Profile.NetworkConfig
+	}
+	// Whichever path pinned the target's network, it owns /etc/netplan alone:
+	// keep cloud-init from re-rendering 50-cloud-init.yaml over it on first boot.
+	if network != nil || in.Machine.InstallNetwork.IsSet() {
+		lateCommands = append(lateCommands, cloudInitNoNetworkCommand())
 	}
 	report := in.reportURL()
 	lateCommands = append(lateCommands, "wget -qO- --post-data=status=ok "+report)
@@ -164,17 +178,8 @@ func renderDefault(in Input) (string, error) {
 	if len(in.Profile.Packages) > 0 {
 		ai["packages"] = in.Profile.Packages
 	}
-	// Network precedence: a friendly production network is applied post-install
-	// (a late-command, above) and deliberately leaves the installer's network
-	// alone, so no `network:` section is emitted for it. Otherwise a per-machine
-	// raw override beats the profile's, which beats nothing.
-	switch {
-	case in.Machine.InstallNetwork.IsSet():
-		// handled by productionNetworkLateCommand; installer keeps default DHCP.
-	case len(in.Machine.NetworkConfig) > 0:
-		ai["network"] = in.Machine.NetworkConfig
-	case len(in.Profile.NetworkConfig) > 0:
-		ai["network"] = in.Profile.NetworkConfig
+	if network != nil {
+		ai["network"] = network
 	}
 	body, err := yaml.Marshal(map[string]any{"autoinstall": ai})
 	if err != nil {

@@ -8,6 +8,16 @@ import (
 	"github.com/menta2k/universe/backend/internal/biz"
 )
 
+const (
+	// cloudInitNoNetworkPath is the cloud-init drop-in that stops the installed
+	// system from re-rendering /etc/netplan/50-cloud-init.yaml on every boot.
+	// The 99- prefix makes it the last cloud.cfg.d fragment merged, so it wins.
+	cloudInitNoNetworkPath = "/etc/cloud/cloud.cfg.d/99-netbootd-disable-network.cfg"
+	// cloudInitNoNetwork disables only cloud-init's network stage; the rest of
+	// cloud-init (users, SSH keys, hostname) still runs on the installed system.
+	cloudInitNoNetwork = "network: {config: disabled}\n"
+)
+
 // productionNetworkLateCommand renders the friendly "production network" of a
 // machine into a curtin late-command that writes the installed system's netplan.
 //
@@ -22,6 +32,9 @@ import (
 // supplies address/gateway/DNS. The provisioning NIC is taken down
 // (activation-mode: off) so it holds no IP and contributes no default route; the
 // production NIC carries the only default route.
+//
+// 00-netbootd.yaml is left as the single netplan file; cloudInitNoNetworkCommand
+// keeps it that way.
 func productionNetworkLateCommand(machine *biz.Machine, dns []string) string {
 	netplan := productionNetplan(machine.InstallNetwork, strings.ToLower(machine.MAC), dns)
 	b64 := base64.StdEncoding.EncodeToString([]byte(netplan))
@@ -45,6 +58,26 @@ func productionNetworkLateCommand(machine *biz.Machine, dns []string) string {
 		"chmod 600 /etc/netplan/00-netbootd.yaml",
 	}, "; ")
 
+	return "curtin in-target -- sh -c '" + script + "'"
+}
+
+// cloudInitNoNetworkCommand returns a late-command that stops the installed
+// system's cloud-init from re-rendering /etc/netplan/50-cloud-init.yaml.
+//
+// netplan merges /etc/netplan/*.yaml in lexical order, so a 50-cloud-init.yaml
+// sorts after — and overrides the ethernets of — both 00-netbootd.yaml (the
+// friendly production network) and subiquity's 00-installer-config.yaml (a raw
+// network override). cloud-init rebuilds that file on first boot from its own
+// datasource view, which is DHCP on whatever NIC it finds, so without this the
+// operator's static addressing loses to DHCP on the first reboot. Emitted for
+// every path that pins the target's network, leaving exactly one owner.
+func cloudInitNoNetworkCommand() string {
+	b64 := base64.StdEncoding.EncodeToString([]byte(cloudInitNoNetwork))
+	script := strings.Join([]string{
+		"set -e",
+		"mkdir -p /etc/cloud/cloud.cfg.d",
+		"printf %s " + b64 + " | base64 -d > " + cloudInitNoNetworkPath,
+	}, "; ")
 	return "curtin in-target -- sh -c '" + script + "'"
 }
 
