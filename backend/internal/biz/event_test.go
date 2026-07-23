@@ -74,6 +74,19 @@ func TestRecordSurvivesStoreAndPublishFailure(t *testing.T) {
 		SessionID: "s1", MachineMAC: "52:54:00:aa:bb:cc",
 		Phase: PhaseDHCPDiscover, Outcome: OutcomeOK,
 	})
+
+	// A rejected store must not leave a half-written event behind, and the
+	// publish is still attempted rather than being skipped once the store fails.
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	if len(repo.stored) != 0 {
+		t.Errorf("stored %d events despite the store failing, want 0", len(repo.stored))
+	}
+	pub.mu.Lock()
+	defer pub.mu.Unlock()
+	if len(pub.published) != 0 {
+		t.Errorf("published %d events despite the bus failing, want 0", len(pub.published))
+	}
 }
 
 func TestRecordStoresAndPublishes(t *testing.T) {
