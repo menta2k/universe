@@ -8,7 +8,9 @@ test('profile editor blocks a profile with no SSH key', async ({ page }) => {
   await page.getByRole('link', { name: /profiles/i }).click()
   await page.getByRole('button', { name: /new profile/i }).click()
 
-  await page.getByLabel(/name/i).fill(`bad-profile-${Date.now()}`)
+  // Match the profile name exactly: the editor also carries a "Login username"
+  // field, so a loose /name/i matches two textboxes and trips strict mode.
+  await page.getByRole('textbox', { name: 'Profile name' }).fill(`bad-profile-${Date.now()}`)
   // Leave SSH authorized keys empty.
   await page.getByRole('button', { name: /save|create/i }).click()
 
