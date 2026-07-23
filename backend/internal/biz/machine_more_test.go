@@ -2,6 +2,7 @@ package biz
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -78,6 +79,92 @@ func TestRecordUnknownBootEmitsEvent(t *testing.T) {
 	}
 	if repo.stored[0].Outcome != OutcomeDenied {
 		t.Errorf("unknown boot outcome = %s, want denied", repo.stored[0].Outcome)
+	}
+}
+
+// seedMachine registers one machine for the lifecycle tests below.
+func seedMachine(t *testing.T, uc *MachineUsecase) *Machine {
+	t.Helper()
+	m, err := uc.Register(context.Background(), RegisterInput{MAC: "52:54:00:ab:cd:ef", Name: "node-a"})
+	if err != nil {
+		t.Fatalf("seed machine: %v", err)
+	}
+	return m
+}
+
+func TestCancelWithoutActiveSession(t *testing.T) {
+	uc, _, _ := newMachineUC(t, true)
+	m := seedMachine(t, uc)
+	if _, err := uc.Cancel(context.Background(), m.ID); !errors.Is(err, ErrNoActiveSession) {
+		t.Errorf("cancel with no session: err = %v, want ErrNoActiveSession", err)
+	}
+}
+
+func TestCancelUnknownMachine(t *testing.T) {
+	uc, _, _ := newMachineUC(t, true)
+	if _, err := uc.Cancel(context.Background(), "nope"); !errors.Is(err, ErrEntityNotFound) {
+		t.Errorf("cancel unknown machine: err = %v, want ErrEntityNotFound", err)
+	}
+}
+
+func TestGetAttachesActiveSession(t *testing.T) {
+	ctx := context.Background()
+	uc, _, sessions := newMachineUC(t, true)
+	m := seedMachine(t, uc)
+
+	// With no session in flight the field stays empty rather than erroring.
+	got, err := uc.Get(ctx, m.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.ActiveSessionID != "" {
+		t.Errorf("active_session_id = %q, want empty with no session", got.ActiveSessionID)
+	}
+
+	sess, err := sessions.Create(ctx, &Session{MachineID: m.ID})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	if got, err = uc.Get(ctx, m.ID); err != nil {
+		t.Fatalf("get with session: %v", err)
+	}
+	if got.ActiveSessionID != sess.ID {
+		t.Errorf("active_session_id = %q, want %q", got.ActiveSessionID, sess.ID)
+	}
+
+	if _, err := uc.Get(ctx, "nope"); !errors.Is(err, ErrEntityNotFound) {
+		t.Errorf("get unknown machine: err = %v, want ErrEntityNotFound", err)
+	}
+}
+
+func TestDeleteBlockedWhileInstalling(t *testing.T) {
+	ctx := context.Background()
+	uc, machines, sessions := newMachineUC(t, true)
+	m := seedMachine(t, uc)
+
+	if _, err := sessions.Create(ctx, &Session{MachineID: m.ID}); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	if err := uc.Delete(ctx, m.ID); !errors.Is(err, ErrSessionConflict) {
+		t.Errorf("delete while installing: err = %v, want ErrSessionConflict", err)
+	}
+	if len(machines.deleted) != 0 {
+		t.Errorf("machine must survive a blocked delete, got deleted=%v", machines.deleted)
+	}
+
+	// Once the session is finished the machine is deletable again.
+	active, err := sessions.GetActiveByMachine(ctx, m.ID)
+	if err != nil {
+		t.Fatalf("get active session: %v", err)
+	}
+	if err := sessions.Finish(ctx, active.ID, SessionFailed, "cancelled", nil); err != nil {
+		t.Fatalf("finish session: %v", err)
+	}
+	if err := uc.Delete(ctx, m.ID); err != nil {
+		t.Errorf("delete after session finished: %v", err)
+	}
+	if len(machines.deleted) != 1 || machines.deleted[0] != m.ID {
+		t.Errorf("deleted = %v, want [%s]", machines.deleted, m.ID)
 	}
 }
 

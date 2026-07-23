@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/menta2k/universe/backend/internal/biz"
 )
 
 var b64InCmd = regexp.MustCompile(`printf %s (\S+) \| base64 -d`)
@@ -33,6 +35,24 @@ func assertCloudInitNetworkDisabled(t *testing.T, late []any) {
 		return
 	}
 	t.Errorf("no cloud-init network drop-in; 50-cloud-init.yaml will override the pinned netplan: %v", late)
+}
+
+func TestProductionDNSPrecedence(t *testing.T) {
+	profile := &biz.Profile{DefaultDNS: []string{"1.1.1.1"}}
+	t.Run("machine DNS wins over the profile default", func(t *testing.T) {
+		m := &biz.Machine{}
+		m.InstallNetwork.DNS = []string{"10.0.0.53", "10.0.0.54"}
+		got := productionDNS(m, profile)
+		if len(got) != 2 || got[0] != "10.0.0.53" || got[1] != "10.0.0.54" {
+			t.Errorf("productionDNS = %v, want the machine's own resolvers", got)
+		}
+	})
+	t.Run("no machine DNS inherits the profile default", func(t *testing.T) {
+		got := productionDNS(&biz.Machine{}, profile)
+		if len(got) != 1 || got[0] != "1.1.1.1" {
+			t.Errorf("productionDNS = %v, want the profile default", got)
+		}
+	})
 }
 
 func TestRenderProductionNetwork(t *testing.T) {
