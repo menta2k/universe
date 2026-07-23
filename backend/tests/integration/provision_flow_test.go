@@ -60,8 +60,11 @@ func TestProvisionFlowOverHTTP(t *testing.T) {
 		t.Errorf("delete while installing: expected 409, got %d", code)
 	}
 
-	// Cancel, then the session is gone and delete works.
-	if code, body, _ := doJSON(t, jar, "POST", base+"/api/v1/machines/"+machineID+"/cancel", "{}"); code != 200 || !strings.Contains(body, "failed") {
+	// Cancel finishes the session as failed but returns the machine to "ready" —
+	// a clean, editable, re-armable state; "failed" is reserved for real install
+	// failures. Then the session is gone and delete works.
+	if code, body, _ := doJSON(t, jar, "POST", base+"/api/v1/machines/"+machineID+"/cancel", "{}"); code != 200 ||
+		!strings.Contains(body, `"provision_state":"ready"`) {
 		t.Fatalf("cancel: code=%d body=%s", code, body)
 	}
 	if code, _, _ := doJSON(t, jar, "DELETE", base+"/api/v1/machines/"+machineID, ""); code != 200 {

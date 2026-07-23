@@ -296,7 +296,8 @@ func (u *MachineUsecase) Provision(ctx context.Context, machineID string) (*Mach
 	return updated, nil
 }
 
-// Cancel aborts the active session and marks the machine failed.
+// Cancel aborts the active session, finishing it as failed while returning the
+// machine itself to "ready" (see below) rather than to "failed".
 func (u *MachineUsecase) Cancel(ctx context.Context, machineID string) (*Machine, error) {
 	m, err := u.machines.GetByID(ctx, machineID)
 	if err != nil {
