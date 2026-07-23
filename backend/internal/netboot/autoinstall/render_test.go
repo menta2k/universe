@@ -381,6 +381,73 @@ func TestRenderEmptySSHKeysSucceeds(t *testing.T) {
 	}
 }
 
+// A profile may leave keyboard/locale unset; the render layer supplies the
+// defaults so subiquity never sees an empty string.
+func TestRenderKeyboardAndLocaleDefaults(t *testing.T) {
+	in := defaultInput()
+	in.Profile.KeyboardLayout = ""
+	in.Profile.Locale = ""
+	ai := parseUserData(t, mustRender(t, in))
+
+	if locale, _ := ai["locale"].(string); locale != "en_US.UTF-8" {
+		t.Errorf("locale = %q, want the en_US.UTF-8 default", locale)
+	}
+	keyboard, _ := ai["keyboard"].(map[string]any)
+	if layout, _ := keyboard["layout"].(string); layout != "us" {
+		t.Errorf("keyboard.layout = %q, want the us default", layout)
+	}
+}
+
+// validateDocument is the last gate before a seed reaches a machine (FR-008):
+// every rejection below would otherwise become a broken or insecure install.
+func TestValidateDocumentRejections(t *testing.T) {
+	const goodSSH = "  ssh:\n    install-server: true\n    authorized-keys: []\n    allow-pw: false\n"
+	const goodIdentity = "  identity:\n    hostname: h\n    username: u\n    password: \"$6$x$y\"\n"
+
+	cases := map[string]string{
+		"not YAML at all":     "#cloud-config\n\tthis: [is: not: yaml",
+		"no autoinstall map":  "#cloud-config\nsomething-else: {}\n",
+		"wrong version":       "#cloud-config\nautoinstall:\n  version: 2\n" + goodIdentity + goodSSH,
+		"no identity section": "#cloud-config\nautoinstall:\n  version: 1\n" + goodSSH,
+		"no ssh section":      "#cloud-config\nautoinstall:\n  version: 1\n" + goodIdentity,
+		"authorized-keys is not a list": "#cloud-config\nautoinstall:\n  version: 1\n" + goodIdentity +
+			"  ssh:\n    authorized-keys: \"ssh-ed25519 AAAA\"\n    allow-pw: false\n",
+		"empty password": "#cloud-config\nautoinstall:\n  version: 1\n" +
+			"  identity:\n    hostname: h\n    username: u\n    password: \"\"\n" + goodSSH,
+	}
+	for name, doc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if err := validateDocument(doc); err == nil {
+				t.Errorf("validateDocument() accepted an invalid document:\n%s", doc)
+			}
+		})
+	}
+}
+
+func TestCmdlineRejectsIncompleteInput(t *testing.T) {
+	// Cmdline validates the same Input as Render, so a caller cannot build a
+	// kernel command line pointing at a seed that was never rendered.
+	for name, mutate := range map[string]func(*Input){
+		"no machine":    func(in *Input) { in.Machine = nil },
+		"no profile":    func(in *Input) { in.Profile = nil },
+		"no session":    func(in *Input) { in.Session = nil },
+		"no boot URL":   func(in *Input) { in.BootURL = "" },
+		"no seed token": func(in *Input) { in.SeedToken = "" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			in := defaultInput()
+			mutate(&in)
+			cmdline, err := Cmdline(in)
+			if err == nil {
+				t.Errorf("Cmdline() should reject incomplete input, got %q", cmdline)
+			}
+			if cmdline != "" {
+				t.Errorf("Cmdline() must return an empty string on error, got %q", cmdline)
+			}
+		})
+	}
+}
+
 func TestRenderCustomTemplate(t *testing.T) {
 	in := defaultInput()
 	in.Profile.UserDataTemplate = `#cloud-config
